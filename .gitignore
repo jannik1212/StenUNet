@@ -1,5 +1,5 @@
 # Ignore all images and masks
-StenUNet/nnNet_training/Raw_data/Dataset_train_val/imagesTr/
-StenUNet/nnNet_training/Raw_data/Dataset_train_val/labelsTr/
+nnNet_training/Raw_data/Dataset_train_val/imagesTr/
+nnNet_training/Raw_data/Dataset_train_val/labelsTr/
 
 
