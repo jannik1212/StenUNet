@@ -1,0 +1,20 @@
+{
+    "channel_names": {
+<<<<<<< HEAD
+        "0": "grey",
+        "1": "pre1"
+=======
+        "0": "grey"
+>>>>>>> 1284f89 (Rename Training Samples, Inspect Masks, updated gitignore, adjust training planning, first run 100 epochs, model upload huggingface)
+    },
+    "labels": {
+        "background": 0,
+        "sten": 1
+    },
+<<<<<<< HEAD
+    "numTraining": 5,
+=======
+    "numTraining": 1000,
+>>>>>>> 1284f89 (Rename Training Samples, Inspect Masks, updated gitignore, adjust training planning, first run 100 epochs, model upload huggingface)
+    "file_ending": ".png"
+}

@@ -1,0 +1,13 @@
+# Ignore all images and masks
+nnNet_training/Raw_data/Dataset_train_val/imagesTr/
+nnNet_training/Raw_data/Dataset_train_val/labelsTr/
+
+<<<<<<< HEAD
+# Ignore model checkpoints
+nnNet_training/nnUNet_results/Dataset_Train_val/nnUNetTrainer__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+nnNet_training/nnUNet_results/Dataset_Train_val/nnUNetTrainer__nnUNetPlans__2d/fold_0/checkpoint_final.pth
+
+
+=======
+>>>>>>> 1ea7d327160619a41b5e746ca8e917aeb22321c1
+

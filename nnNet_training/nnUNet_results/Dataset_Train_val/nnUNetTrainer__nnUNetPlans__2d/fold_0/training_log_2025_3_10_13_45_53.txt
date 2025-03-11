@@ -1,0 +1,19 @@
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset_Train_val', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 115.30154836509529, 'median': 116.0, 'min': 0.0, 'percentile_00_5': 39.0, 'percentile_99_5': 202.0, 'std': 33.93669307531929}}} 
+ 
+2025-03-10 13:45:57.637165: unpacking dataset... 
+2025-03-10 13:46:02.903440: unpacking done... 
+2025-03-10 13:46:02.904151: do_dummy_2d_data_aug: False 
+2025-03-10 13:46:02.910830: Creating new 5-fold cross-validation split... 
+2025-03-10 13:46:02.918112: Desired fold for training: 0 
+2025-03-10 13:46:02.918217: This split has 800 training and 200 validation cases. 
+2025-03-10 13:46:02.933456: Unable to plot network architecture: 
+2025-03-10 13:46:02.933586: No module named 'hiddenlayer' 
+2025-03-10 13:46:02.940348:  
+2025-03-10 13:46:02.940483: Epoch 0 
+2025-03-10 13:46:02.940688: Current learning rate: 0.01 
