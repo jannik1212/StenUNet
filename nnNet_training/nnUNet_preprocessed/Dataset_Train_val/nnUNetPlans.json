@@ -26,7 +26,7 @@
         "2d": {
             "data_identifier": "nnUNetPlans_2d",
             "preprocessor_name": "DefaultPreprocessor",
-            "batch_size": 2,
+            "batch_size": 12,
             "patch_size": [
                 512,
                 512
@@ -40,11 +40,9 @@
                 1.0
             ],
             "normalization_schemes": [
-                "ZScoreNormalization",
                 "ZScoreNormalization"
             ],
             "use_mask_for_norm": [
-                false,
                 false
             ],
             "UNet_class_name": "PlainConvUNet",
@@ -169,22 +167,13 @@
     "label_manager": "LabelManager",
     "foreground_intensity_properties_per_channel": {
         "0": {
-            "max": 200.0,
-            "mean": 71.4432373046875,
-            "median": 78.0,
-            "min": 6.0,
-            "percentile_00_5": 8.0,
-            "percentile_99_5": 169.0,
-            "std": 41.683528900146484
-        },
-        "1": {
-            "max": 200.0,
-            "mean": 71.44103240966797,
-            "median": 78.0,
-            "min": 6.0,
-            "percentile_00_5": 8.0,
-            "percentile_99_5": 169.0,
-            "std": 41.68144989013672
+            "max": 255.0,
+            "mean": 115.1339355667001,
+            "median": 116.0,
+            "min": 0.0,
+            "percentile_00_5": 37.0,
+            "percentile_99_5": 202.0,
+            "std": 34.11477370605327
         }
     }
 }
