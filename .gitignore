@@ -2,6 +2,12 @@
 nnNet_training/Raw_data/Dataset_train_val/imagesTr/
 nnNet_training/Raw_data/Dataset_train_val/labelsTr/
 dataset_test/raw
+dataset_test/annotations
+dataset_test/post_prediction
+dataset_test/preprocessed
+dataset_test/raw_prediction
+dataset_test/raw_masks/test
+
 
 # Ignore model checkpoints
 nnNet_training/nnUNet_results/Dataset_Train_val/nnUNetTrainer__nnUNetPlans__2d/fold_0/checkpoint_best.pth
@@ -11,9 +17,3 @@ model_folder/
 # Ignore preprocessed data
 nnNet_training/nnUNet_preprocessed/Dataset_Train_val/gt_segmentations/
 nnNet_training/nnUNet_preprocessed/Dataset_Train_val/nnUNetPlans_2d/
-
-
-dataset_test/post_prediction
-dataset_test/preprocessed
-dataset_test/raw_prediction
-
