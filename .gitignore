@@ -6,7 +6,8 @@ dataset_test/annotations
 dataset_test/post_prediction
 dataset_test/preprocessed
 dataset_test/raw_prediction
-dataset_test/raw_masks/test
+dataset_test/labels
+nnNet_training/Raw_data/Dataset_Train_val/annotations
 
 
 # Ignore model checkpoints
