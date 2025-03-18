@@ -1,12 +1,13 @@
 # Ignore all images and masks
 nnNet_training/Raw_data/Dataset_train_val/imagesTr/
 nnNet_training/Raw_data/Dataset_train_val/labelsTr/
-dataset_test/raw
+dataset_test/images
 dataset_test/annotations
 dataset_test/post_prediction
 dataset_test/preprocessed
 dataset_test/raw_prediction
 dataset_test/labels
+dataset_test/evaluation_metrics.csv
 nnNet_training/Raw_data/Dataset_Train_val/annotations
 
 
