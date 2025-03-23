@@ -1,19 +1,18 @@
 # Ignore all images and masks
 nnNet_training/Raw_data/Dataset_train_val/imagesTr/
 nnNet_training/Raw_data/Dataset_train_val/labelsTr/
-dataset_test/images
-dataset_test/annotations
-dataset_test/post_prediction
-dataset_test/preprocessed
-dataset_test/raw_prediction
-dataset_test/labels
-dataset_test/evaluation_metrics.csv
+dataset_test_100_ep/
+dataset_test_pretrained_own_test/
+dataset_test/
 nnNet_training/Raw_data/Dataset_Train_val/annotations
 
 
 # Ignore model checkpoints
 nnNet_training/nnUNet_results/Dataset_Train_val/nnUNetTrainer__nnUNetPlans__2d/fold_0/checkpoint_best.pth
 nnNet_training/nnUNet_results/Dataset_Train_val/nnUNetTrainer__nnUNetPlans__2d/fold_0/checkpoint_final.pth
+nnNet_training/nnUNet_results/Dataset_Train_val/fold_0
+model_folder_100_ep/
+model_folder_pretrained_own_test/
 model_folder/
 
 # Ignore preprocessed data

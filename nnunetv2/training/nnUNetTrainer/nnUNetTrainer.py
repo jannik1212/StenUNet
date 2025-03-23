@@ -8,10 +8,10 @@ from datetime import datetime
 from time import time, sleep
 from typing import Union, Tuple, List
 
-import numpy as np
-import torch
-from batchgenerators.dataloading.single_threaded_augmenter import SingleThreadedAugmenter
-from batchgenerators.transforms.abstract_transforms import AbstractTransform, Compose
+import numpy as np #type: ignore
+import torch #type: ignore
+from batchgenerators.dataloading.single_threaded_augmenter import SingleThreadedAugmenter#type: ignore
+from batchgenerators.transforms.abstract_transforms import AbstractTransform, Compose #type: ignore
 from batchgenerators.transforms.color_transforms import BrightnessMultiplicativeTransform, \
     ContrastAugmentationTransform, GammaTransform
 from batchgenerators.transforms.noise_transforms import GaussianNoiseTransform, GaussianBlurTransform
@@ -136,11 +136,11 @@ class nnUNetTrainer(object):
 
         ### Some hyperparameters for you to fiddle with
         self.initial_lr = 1e-2
-        self.weight_decay = 3e-5
+        self.weight_decay = 1e-5
         self.oversample_foreground_percent = 0.33#2/3 must contain 
-        self.num_iterations_per_epoch = 250
-        self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 100
+        self.num_iterations_per_epoch = 400
+        self.num_val_iterations_per_epoch = 100
+        self.num_epochs = 400
         self.current_epoch = 0
 
         ### Dealing with labels/regions
