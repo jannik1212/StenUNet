@@ -1,6 +1,6 @@
 from nnunetv2.run.run_training import run_training
 import argparse 
-import torch
+import torch#type: ignore
 
 if __name__ == "__main__":
 

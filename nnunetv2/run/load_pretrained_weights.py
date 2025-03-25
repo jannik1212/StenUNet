@@ -8,15 +8,7 @@ def load_pretrained_weights(network, fname, verbose=False):
 
     network can be either a plain model or DDP. We need to account for that in the parameter names
     """
-<<<<<<< HEAD
-    saved_model = torch.load(fname)
-=======
-<<<<<<< HEAD
     saved_model = torch.load(fname, weights_only=False)
-=======
-    saved_model = torch.load(fname)
->>>>>>> 1ea7d327160619a41b5e746ca8e917aeb22321c1
->>>>>>> 1284f89 (Rename Training Samples, Inspect Masks, updated gitignore, adjust training planning, first run 100 epochs, model upload huggingface)
     pretrained_dict = saved_model['network_weights']
     is_ddp = isinstance(network, DDP)
 
