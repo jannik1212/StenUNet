@@ -140,7 +140,7 @@ class nnUNetTrainer(object):
         self.oversample_foreground_percent = 0.33#2/3 must contain 
         self.num_iterations_per_epoch = 400
         self.num_val_iterations_per_epoch = 100
-        self.num_epochs = 400
+        self.num_epochs = 300
         self.current_epoch = 0
 
         ### Dealing with labels/regions
