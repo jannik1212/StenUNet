@@ -1,10 +1,6 @@
 # Ignore all images and masks
-nnNet_training/Raw_data/Dataset_train_val/imagesTr/
-nnNet_training/Raw_data/Dataset_train_val/labelsTr/
-nnNet_training/Raw_data/Dataset_Train_val/annotations
 dataset_test_100_ep/
 dataset_test_pretrained_own_test/
-dataset_test/
 
 
 
