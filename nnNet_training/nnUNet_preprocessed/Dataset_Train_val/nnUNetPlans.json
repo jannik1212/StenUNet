@@ -26,10 +26,10 @@
         "2d": {
             "data_identifier": "nnUNetPlans_2d",
             "preprocessor_name": "DefaultPreprocessor",
-            "batch_size": 12,
+            "batch_size": 13,
             "patch_size": [
                 512,
-                512
+                448
             ],
             "median_image_size_in_voxels": [
                 512.0,
@@ -54,7 +54,6 @@
                 2,
                 2,
                 2,
-                2,
                 2
             ],
             "n_conv_per_stage_decoder": [
@@ -63,12 +62,11 @@
                 2,
                 2,
                 2,
-                2,
                 2
             ],
             "num_pool_per_axis": [
-                7,
-                7
+                6,
+                6
             ],
             "pool_op_kernel_sizes": [
                 [
@@ -98,17 +96,9 @@
                 [
                     2,
                     2
-                ],
-                [
-                    2,
-                    2
                 ]
             ],
             "conv_kernel_sizes": [
-                [
-                    3,
-                    3
-                ],
                 [
                     3,
                     3
@@ -168,12 +158,12 @@
     "foreground_intensity_properties_per_channel": {
         "0": {
             "max": 255.0,
-            "mean": 115.1339355667001,
-            "median": 116.0,
+            "mean": 97.82563781738281,
+            "median": 95.0,
             "min": 0.0,
-            "percentile_00_5": 37.0,
-            "percentile_99_5": 202.0,
-            "std": 34.11477370605327
+            "percentile_00_5": 31.0,
+            "percentile_99_5": 187.0,
+            "std": 31.88799476623535
         }
     }
 }

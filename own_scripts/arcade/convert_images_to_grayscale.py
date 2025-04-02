@@ -17,7 +17,7 @@ def convert_images_to_grayscale(images_dir):
         print(f"Converted: {image_file} to grayscale.")
 
 if __name__ == "__main__":
-    images_dir = "../nnNet_training/Raw_data/Dataset_Train_val/imagesTr"
+    images_dir = "nnNet_training/Raw_data/Dataset_Train_val/imagesTr"
     
     print("Converting images to grayscale...")
     convert_images_to_grayscale(images_dir)

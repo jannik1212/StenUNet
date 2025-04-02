@@ -11,3 +11,4 @@ dataset_test/
 model_folder/checkpoint_best.pth
 
 # Ignore preprocessed data
+nnNet_training/nnUNet_preprocessed/
