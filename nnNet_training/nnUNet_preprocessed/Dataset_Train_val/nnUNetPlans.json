@@ -26,10 +26,10 @@
         "2d": {
             "data_identifier": "nnUNetPlans_2d",
             "preprocessor_name": "DefaultPreprocessor",
-            "batch_size": 13,
+            "batch_size": 2,
             "patch_size": [
                 512,
-                448
+                512
             ],
             "median_image_size_in_voxels": [
                 512.0,
@@ -40,14 +40,17 @@
                 1.0
             ],
             "normalization_schemes": [
+                "ZScoreNormalization",
                 "ZScoreNormalization"
             ],
             "use_mask_for_norm": [
+                false,
                 false
             ],
             "UNet_class_name": "PlainConvUNet",
             "UNet_base_num_features": 32,
             "n_conv_per_stage_encoder": [
+                2,
                 2,
                 2,
                 2,
@@ -62,11 +65,12 @@
                 2,
                 2,
                 2,
+                2,
                 2
             ],
             "num_pool_per_axis": [
-                6,
-                6
+                7,
+                7
             ],
             "pool_op_kernel_sizes": [
                 [
@@ -96,9 +100,17 @@
                 [
                     2,
                     2
+                ],
+                [
+                    2,
+                    2
                 ]
             ],
             "conv_kernel_sizes": [
+                [
+                    3,
+                    3
+                ],
                 [
                     3,
                     3
@@ -157,13 +169,22 @@
     "label_manager": "LabelManager",
     "foreground_intensity_properties_per_channel": {
         "0": {
-            "max": 255.0,
-            "mean": 97.82563781738281,
-            "median": 95.0,
-            "min": 0.0,
-            "percentile_00_5": 31.0,
-            "percentile_99_5": 187.0,
-            "std": 31.88799476623535
+            "max": 200.0,
+            "mean": 71.4432373046875,
+            "median": 78.0,
+            "min": 6.0,
+            "percentile_00_5": 8.0,
+            "percentile_99_5": 169.0,
+            "std": 41.683528900146484
+        },
+        "1": {
+            "max": 200.0,
+            "mean": 71.44103240966797,
+            "median": 78.0,
+            "min": 6.0,
+            "percentile_00_5": 8.0,
+            "percentile_99_5": 169.0,
+            "std": 41.68144989013672
         }
     }
 }
