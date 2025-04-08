@@ -1,0 +1,12 @@
+{
+    "channel_names": {
+      "0": "grey"
+    },
+    "labels": {
+      "background": 0,
+      "vessel": 1
+    },
+    "numTraining": 40,
+    "file_ending": ".nrrd"
+  }
+  
