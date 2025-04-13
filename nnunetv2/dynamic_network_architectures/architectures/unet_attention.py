@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.nn.modules.conv import _ConvNd
 from torch.nn.modules.dropout import _DropoutNd
 from typing import Union, Type, List, Tuple
+import numpy as np
+
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim
 
 
@@ -40,8 +42,10 @@ class ConvStack(nn.Module):
         for i in range(num_convs):
             in_ch = in_channels if i == 0 else out_channels
             blocks.append(conv_op(in_ch, out_channels, kernel_size=3, padding=1, bias=False))
-            blocks.append(norm_op(out_channels, **norm_op_kwargs))
-            blocks.append(nonlin(**nonlin_kwargs))
+            if norm_op is not None and norm_op_kwargs is not None:
+                blocks.append(norm_op(out_channels, **norm_op_kwargs))
+            if nonlin is not None and nonlin_kwargs is not None:
+                blocks.append(nonlin(**nonlin_kwargs))
         self.block = nn.Sequential(*blocks)
 
     def forward(self, x):
@@ -54,7 +58,7 @@ class AttentionUNet(nn.Module):
                  n_stages: int,
                  features_per_stage: Union[int, List[int], Tuple[int, ...]],
                  conv_op: Type[_ConvNd],
-                 kernel_sizes,  # unused but needed for compatibility
+                 kernel_sizes,
                  strides: Union[int, List[int], Tuple[int, ...]],
                  n_conv_per_stage: Union[int, List[int], Tuple[int, ...]],
                  num_classes: int,
@@ -71,6 +75,9 @@ class AttentionUNet(nn.Module):
                  ):
         super().__init__()
         self.deep_supervision = deep_supervision
+        self.conv_op = conv_op
+        self.num_classes = num_classes
+
         dim = convert_conv_op_to_dim(conv_op)
 
         if isinstance(n_conv_per_stage, int):
@@ -98,6 +105,7 @@ class AttentionUNet(nn.Module):
         self.upconvs = nn.ModuleList()
         self.attentions = nn.ModuleList()
         self.decoders = nn.ModuleList()
+        self.seg_layers = nn.ModuleList()
 
         for d in range(n_stages - 2, -1, -1):
             self.upconvs.append(
@@ -115,23 +123,46 @@ class AttentionUNet(nn.Module):
                           conv_op, norm_op, norm_op_kwargs,
                           dropout_op, dropout_op_kwargs, nonlin, nonlin_kwargs)
             )
+            self.seg_layers.append(conv_op(features_per_stage[d], num_classes, 1))
 
-        self.final = conv_op(features_per_stage[0], num_classes, 1)
+        # Final dummy decoder for compatibility with nnU-Net
+        self.decoder = nn.Module()
+        self.decoder.deep_supervision = self.deep_supervision
 
     def forward(self, x):
-        enc_feats = []
+        skips = []
         for enc, pool in zip(self.encoders, self.pooling):
             x = enc(x)
-            enc_feats.append(x)
+            skips.append(x)
             x = pool(x)
-
         x = self.bottleneck(x)
 
+        seg_outputs = []
         for i in range(len(self.upconvs)):
             x = self.upconvs[i](x)
-            skip = enc_feats[-(i + 2)]
+            skip = skips[-(i + 2)]
+            if x.shape[2:] != skip.shape[2:]:
+                x = nn.functional.interpolate(x, size=skip.shape[2:], mode='trilinear' if x.dim() == 5 else 'bilinear', align_corners=False)
             skip = self.attentions[i](x, skip)
             x = torch.cat((skip, x), dim=1)
             x = self.decoders[i](x)
+            seg_outputs.append(self.seg_layers[i](x))
 
-        return self.final(x)
+        seg_outputs = seg_outputs[::-1]
+
+        if not self.deep_supervision:
+            return seg_outputs[0]
+        else:
+            return seg_outputs
+
+    def compute_conv_feature_map_size(self, input_size):
+        total = 0
+        for enc in self.encoders:
+            total += np.prod(input_size)
+            input_size = [i // 2 for i in input_size]  # pooling
+        total += np.prod(input_size)  # bottleneck
+        for dec in self.decoders:
+            input_size = [i * 2 for i in input_size]  # upsampling
+            total += np.prod(input_size)
+        total += np.prod(input_size) * self.num_classes  # seg output
+        return int(total)

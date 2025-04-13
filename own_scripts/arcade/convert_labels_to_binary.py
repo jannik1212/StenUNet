@@ -18,7 +18,9 @@ def convert_labels_to_binary(labels_dir):
         print(f"Converted: {label_file} to binary (0/1)")
 
 if __name__ == "__main__":
-    labels_dir = "../nnNet_training/Raw_data/Dataset_Train_val/labelsTr"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    labels_dir = os.path.join(base_dir, "../../nnNet_training/Raw_data/Dataset_train_val/labelsTr")
+    
     
     print("Converting label masks to binary format...")
     convert_labels_to_binary(labels_dir)
