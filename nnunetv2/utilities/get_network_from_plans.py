@@ -3,6 +3,7 @@ from nnunetv2.dynamic_network_architectures.building_blocks.helper import get_ma
 from nnunetv2.dynamic_network_architectures.initialization.weight_init import init_last_bn_before_add_to_0
 from nnunetv2.utilities.network_initialization import InitWeights_He
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
+from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
 from torch import nn
 
 
@@ -28,6 +29,7 @@ def get_network_from_plans(plans_manager: PlansManager,
     mapping = {
         'PlainConvUNet': PlainConvUNet,
         'ResidualEncoderUNet': ResidualEncoderUNet,
+        'AttentionUNet': AttentionUNet
     }
     kwargs = {
         'PlainConvUNet': {
@@ -43,8 +45,18 @@ def get_network_from_plans(plans_manager: PlansManager,
             'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
             'dropout_op': None, 'dropout_op_kwargs': None,
             'nonlin': nn.LeakyReLU, 'nonlin_kwargs': {'inplace': True},
+        },
+        'AttentionUNet': { 
+            'conv_bias': True,
+            'norm_op': get_matching_instancenorm(conv_op),
+            'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
+            'dropout_op': None,
+            'dropout_op_kwargs': None,
+            'nonlin': nn.LeakyReLU,
+            'nonlin_kwargs': {'inplace': True},
         }
     }
+
     assert segmentation_network_class_name in mapping.keys(), 'The network architecture specified by the plans file ' \
                                                               'is non-standard (maybe your own?). Yo\'ll have to dive ' \
                                                               'into either this ' \
