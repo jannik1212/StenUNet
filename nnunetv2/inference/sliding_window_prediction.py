@@ -79,31 +79,36 @@ def get_sliding_window_generator(image_size: Tuple[int, ...], tile_size: Tuple[i
                     yield slicer
 
 
-def maybe_mirror_and_predict(network: nn.Module, x: torch.Tensor, mirror_axes: Tuple[int, ...] = None) \
-        -> torch.Tensor:
-    prediction = network(x)
+def maybe_mirror_and_predict(network: nn.Module, x: torch.Tensor, mirror_axes: Tuple[int, ...] = None) -> torch.Tensor:
+    def unwrap(tensor_like):
+        return tensor_like[0] if isinstance(tensor_like, (tuple, list)) else tensor_like
+
+    prediction = unwrap(network(x))
 
     if mirror_axes is not None:
         # check for invalid numbers in mirror_axes
         # x should be 5d for 3d images and 4d for 2d. so the max value of mirror_axes cannot exceed len(x.shape) - 3
         assert max(mirror_axes) <= len(x.shape) - 3, 'mirror_axes does not match the dimension of the input!'
 
-        num_predictons = 2 ** len(mirror_axes)
+        num_predictions = 2 ** len(mirror_axes)
+
         if 0 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (2,))), (2,))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (2,)))), (2,))
         if 1 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (3,))), (3,))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (3,)))), (3,))
         if 2 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (4,))), (4,))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (4,)))), (4,))
         if 0 in mirror_axes and 1 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (2, 3))), (2, 3))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (2, 3)))), (2, 3))
         if 0 in mirror_axes and 2 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (2, 4))), (2, 4))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (2, 4)))), (2, 4))
         if 1 in mirror_axes and 2 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (3, 4))), (3, 4))
+            prediction += torch.flip(unwrap(network(torch.flip(x, (3, 4)))), (3, 4))
         if 0 in mirror_axes and 1 in mirror_axes and 2 in mirror_axes:
-            prediction += torch.flip(network(torch.flip(x, (2, 3, 4))), (2, 3, 4))
-        prediction /= num_predictons
+            prediction += torch.flip(unwrap(network(torch.flip(x, (2, 3, 4)))), (2, 3, 4))
+
+        prediction /= num_predictions
+
     return prediction
 
 
