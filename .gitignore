@@ -2,9 +2,6 @@
 dataset_test_100_ep/
 dataset_test_pretrained_own_test/
 
-
-
-model_folder/checkpoint_best.pth
-
-# Ignore preprocessed data
-nnNet_training/nnUNet_preprocessed/
+# ignore ds_store and ipynb checkpoints
+*.DS_Store
+.ipynb_checkpoints
