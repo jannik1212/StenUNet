@@ -1,14 +1,13 @@
+from dynamic_network_architectures.building_blocks.medical_net_encoder_model import MedicalNetResNet200Encoder
 import torch.nn as nn
-from stenunet.network_architecture.medicalnet_encoder_hf import MedicalNetResNet200Encoder
 
 class WrappedMedicalNetEncoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = MedicalNetResNet200Encoder(in_channels=1)
 
-        # These must match what UNetDecoder expects
         self.output_channels = [256, 512, 1024, 2048]
-        self.strides = [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+        self.strides = [[2, 2, 2]] * 4
         self.conv_op = nn.Conv3d
         self.norm_op = nn.InstanceNorm3d
         self.norm_op_kwargs = {'eps': 1e-5, 'affine': True}
@@ -20,4 +19,7 @@ class WrappedMedicalNetEncoder(nn.Module):
         self.conv_bias = False
 
     def forward(self, x):
-        return self.encoder(x)  # returns list of feature maps
+        return self.encoder(x)
+
+
+
