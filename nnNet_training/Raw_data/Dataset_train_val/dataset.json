@@ -1,11 +1,12 @@
 {
     "channel_names": {
-        "0": "grey"
+      "0": "grey"
     },
     "labels": {
-        "background": 0,
-        "sten": 1
+      "background": 0,
+      "vessel": 1
     },
-    "numTraining": 1000,
-    "file_ending": ".png"
-}
+    "numTraining": 40,
+    "file_ending": ".nrrd"
+  }
+  
