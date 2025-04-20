@@ -5,3 +5,6 @@ dataset_test_pretrained_own_test/
 # ignore ds_store and ipynb checkpoints
 *.DS_Store
 .ipynb_checkpoints
+
+# ignore prediction files
+pred_comparison/
