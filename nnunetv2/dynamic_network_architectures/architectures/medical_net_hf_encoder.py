@@ -49,12 +49,14 @@ class StenUNetPretrained(nn.Module):
             encoder=self.encoder,
             num_classes=num_classes,
             n_conv_per_stage=n_conv_per_stage,
-            deep_supervision=False  # You can toggle this if needed
+            deep_supervision=True  # You can toggle this if needed
         )
 
     def forward(self, x):
         skips = self.encoder(x)
-        return self.decoder(skips)
+        out = self.decoder(skips)
+        return out if isinstance(out, (tuple, list)) else [out]
+
     
     def compute_conv_feature_map_size(self, input_size):
         """
