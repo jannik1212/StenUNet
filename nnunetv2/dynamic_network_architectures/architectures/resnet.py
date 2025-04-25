@@ -42,6 +42,11 @@ _ResNet_CONFIGS = {
                      'strides': (1, 2, 2, 2),
                      'block': BottleneckD, 'bottleneck_channels': (64, 128, 256, 512), 'disable_default_stem': False,
                      'stem_channels': 64},
+    '200_mednet': {'features_per_stage': (64, 128, 256, 512), 'n_blocks_per_stage': (3, 24, 36, 3),
+                   'strides': (1, 2, 2, 2),
+                   'block': BottleneckD, 'bottleneck_channels': (64, 128, 256, 512),'disable_default_stem': True,
+                   'stem_channels': 64},
+
 }
 
 
@@ -220,6 +225,20 @@ class ResNet152bn(ResNetD):
         super().__init__(n_classes, n_input_channels, config='152_bn', input_dimension=input_dimension,
                          final_layer_dropout=final_layer_dropout, stochastic_depth_p=stochastic_depth_p,
                          squeeze_excitation=squeeze_excitation, squeeze_excitation_rd_ratio=squeeze_excitation_rd_ratio)
+
+class ResNet200_MedicalNet(ResNetD):
+    def __init__(self, n_classes: int, n_input_channels: int = 1, input_dimension: int = 3,
+                 final_layer_dropout: float = 0.0, stochastic_depth_p: float = 0.0,
+                 squeeze_excitation: bool = False, squeeze_excitation_rd_ratio: float = 1. / 16):
+        super().__init__(n_classes=n_classes,
+                         n_input_channel=n_input_channels,
+                         config='200_mednet',
+                         input_dimension=input_dimension,
+                         final_layer_dropout=final_layer_dropout,
+                         stochastic_depth_p=stochastic_depth_p,
+                         squeeze_excitation=squeeze_excitation,
+                         squeeze_excitation_rd_ratio=squeeze_excitation_rd_ratio)
+   
 
 
 if __name__ == '__main__':
