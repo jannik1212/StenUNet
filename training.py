@@ -18,6 +18,10 @@ if __name__ == "__main__":
                         help='[OPTIONAL] path to nnU-Net checkpoint file to be used as pretrained model. Will only '
                              'be used when actually training. Beta. Use with caution.')
     
+    parser.add_argument('-pretrained_encoder_path', type=str, required=False, default=None,
+                    help='[OPTIONAL] Path to the pretrained encoder weights to initialize encoder.')
+
+    
     args = parser.parse_args()
 
     

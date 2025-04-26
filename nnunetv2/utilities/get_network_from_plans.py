@@ -4,7 +4,6 @@ from nnunetv2.dynamic_network_architectures.initialization.weight_init import in
 from nnunetv2.utilities.network_initialization import InitWeights_He
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
-from nnunetv2.dynamic_network_architectures.architectures.resnet200_unet import ResNet200UNet
 from torch import nn
 
 
@@ -30,8 +29,7 @@ def get_network_from_plans(plans_manager: PlansManager,
     mapping = {
         'PlainConvUNet': PlainConvUNet,
         'ResidualEncoderUNet': ResidualEncoderUNet,
-        'AttentionUNet': AttentionUNet,
-        'ResNet200UNet': ResNet200UNet
+        'AttentionUNet': AttentionUNet
     }
     kwargs = {
         'PlainConvUNet': {
@@ -49,15 +47,6 @@ def get_network_from_plans(plans_manager: PlansManager,
             'nonlin': nn.LeakyReLU, 'nonlin_kwargs': {'inplace': True},
         },
         'AttentionUNet': { 
-            'conv_bias': True,
-            'norm_op': get_matching_instancenorm(conv_op),
-            'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
-            'dropout_op': None,
-            'dropout_op_kwargs': None,
-            'nonlin': nn.LeakyReLU,
-            'nonlin_kwargs': {'inplace': True},
-        },
-        'ResNet200UNet': {
             'conv_bias': True,
             'norm_op': get_matching_instancenorm(conv_op),
             'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
