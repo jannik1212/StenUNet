@@ -11,8 +11,12 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+from genericpath import isdir, isfile
+from ntpath import join
 import shutil
 from typing import Union, Tuple
+
+from networkx import write_gpickle
 
 import nnunetv2
 import numpy as np
@@ -26,6 +30,7 @@ from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
 from nnunetv2.utilities.utils import get_identifiers_from_splitted_dataset_folder, \
     create_lists_from_splitted_dataset_folder
+
 
 
 class DefaultPreprocessor(object):
@@ -129,7 +134,7 @@ class DefaultPreprocessor(object):
         data, seg, properties = self.run_case(image_files, seg_file, plans_manager, configuration_manager, dataset_json)
         # print('dtypes', data.dtype, seg.dtype)
         np.savez_compressed(output_filename_truncated + '.npz', data=data, seg=seg)
-        write_pickle(properties, output_filename_truncated + '.pkl')
+        write_gpickle(properties, output_filename_truncated + '.pkl')
 
     @staticmethod
     def _sample_foreground_locations(seg: np.ndarray, classes_or_regions: Union[List[int], List[Tuple[int, ...]]],

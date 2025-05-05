@@ -128,7 +128,7 @@ def run_ddp(rank, dataset_name_or_id, configuration, fold, tr, p, use_compressed
 
 def run_training(dataset_name_or_id: Union[str, int],
                  configuration: str, fold: Union[int, str],
-                 trainer_class_name: str = 'resnetPretrainedTrainer',
+                 trainer_class_name: str = 'nnUNetTrainer',
                  plans_identifier: str = 'nnUNetPlans',
                  pretrained_weights: Optional[str] = None,
                  num_gpus: int = 1,
