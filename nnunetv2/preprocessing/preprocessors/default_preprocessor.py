@@ -11,13 +11,6 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-from genericpath import isdir, isfile
-from ntpath import join
-import shutil
-from typing import Union, Tuple
-
-from networkx import write_gpickle
-
 import nnunetv2
 import numpy as np
 from acvl_utils.miscellaneous.ptqdm import ptqdm
@@ -134,7 +127,7 @@ class DefaultPreprocessor(object):
         data, seg, properties = self.run_case(image_files, seg_file, plans_manager, configuration_manager, dataset_json)
         # print('dtypes', data.dtype, seg.dtype)
         np.savez_compressed(output_filename_truncated + '.npz', data=data, seg=seg)
-        write_gpickle(properties, output_filename_truncated + '.pkl')
+        write_pickle(properties, output_filename_truncated + '.pkl')
 
     @staticmethod
     def _sample_foreground_locations(seg: np.ndarray, classes_or_regions: Union[List[int], List[Tuple[int, ...]]],

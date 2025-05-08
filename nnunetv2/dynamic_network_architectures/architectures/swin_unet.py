@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.conv import _ConvNd
 from typing import Union, Type, List, Tuple, Union
+import numpy as np
 
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim, get_matching_convtransp
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import ConvStack
@@ -179,7 +180,7 @@ class SwinUNet(nn.Module):
         total = 0
         # encoder
         for s, pool in enumerate(self.pooling):
-            total += self.features_per_stage[s] * torch.tensor(sizes).prod().item()
+            total += self.features_per_stage[s] * int(np.prod(sizes))
             if not isinstance(pool, nn.Identity):
                 for i in range(len(sizes)):
                     sizes[i] //= self.strides[s + 1]

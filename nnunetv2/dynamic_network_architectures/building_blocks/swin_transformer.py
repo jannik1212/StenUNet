@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.conv import _ConvNd
-from typing import Type, Tuple, Union as _Union
+from typing import Type, Tuple, Union
 
 
 def window_partition(x: torch.Tensor, window_size: int) -> torch.Tensor:
@@ -204,7 +204,7 @@ class PatchEmbed(nn.Module):
         self,
         in_chans: int,
         embed_dim: int,
-        patch_size: _Union[int, Tuple[int, ...]] = 4,
+        patch_size: Union[int, Tuple[int, ...]] = 4,
         conv_op: Type[_ConvNd] = nn.Conv2d,
         conv_bias: bool = False,
         norm_layer: Type[nn.Module] = None,
@@ -225,16 +225,19 @@ class PatchEmbed(nn.Module):
             bias=conv_bias
         )
         if norm_layer is not None:
+            # e.g. InstanceNorm2d or InstanceNorm3d
             self.norm = norm_layer(embed_dim, **(norm_kwargs or {}))
         else:
             self.norm = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x is [B, C, H, W] or [B, C, D, H, W]
         x = self.proj(x)
         if self.norm is not None:
-            B, C, *shape = x.shape
-            x = self.norm(x.flatten(2).transpose(1, 2)).transpose(1, 2).view(B, C, *shape)
+            # apply InstanceNorm2d/3d directly
+            x = self.norm(x)
         return x
+
 
 
 class PatchMerging(nn.Module):
@@ -248,7 +251,7 @@ class PatchMerging(nn.Module):
         conv_op: Type[_ConvNd] = nn.Conv2d,
         norm_layer: Type[nn.Module] = None,
         norm_kwargs: dict = None,
-        stride: _Union[int, Tuple[int, ...]] = 2
+        stride: Union[int, Tuple[int, ...]] = 2
     ):
         super().__init__()
         self.reduction = conv_op(
@@ -259,13 +262,15 @@ class PatchMerging(nn.Module):
             bias=False
         )
         if norm_layer is not None:
+            # e.g. InstanceNorm2d or InstanceNorm3d
             self.norm = norm_layer(out_dim, **(norm_kwargs or {}))
         else:
             self.norm = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x is [B, C, H, W] or [B, C, D, H, W]
         x = self.reduction(x)
         if self.norm is not None:
-            B, C, *shape = x.shape
-            x = self.norm(x.flatten(2).transpose(1, 2)).transpose(1, 2).view(B, C, *shape)
+            # apply InstanceNorm2d/3d directly
+            x = self.norm(x)
         return x
