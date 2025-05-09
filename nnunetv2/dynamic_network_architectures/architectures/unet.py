@@ -88,6 +88,7 @@ class ResidualEncoderUNet(nn.Module):
                  nonlin: Union[None, Type[torch.nn.Module]] = None,
                  nonlin_kwargs: dict = None,
                  deep_supervision: bool = False,
+                 nonlin_first: bool = False,
                  block: Union[Type[BasicBlockD], Type[BottleneckD]] = BasicBlockD,
                  bottleneck_channels: Union[int, List[int], Tuple[int, ...]] = None,
                  stem_channels: int = None
@@ -104,11 +105,37 @@ class ResidualEncoderUNet(nn.Module):
                                                                 f"as we have resolution stages. here: {n_stages} " \
                                                                 f"stages, so it should have {n_stages - 1} entries. " \
                                                                 f"n_conv_per_stage_decoder: {n_conv_per_stage_decoder}"
-        self.encoder = ResidualEncoder(input_channels, n_stages, features_per_stage, conv_op, kernel_sizes, strides,
-                                       n_blocks_per_stage, conv_bias, norm_op, norm_op_kwargs, dropout_op,
-                                       dropout_op_kwargs, nonlin, nonlin_kwargs, block, bottleneck_channels,
-                                       return_skips=True, disable_default_stem=False, stem_channels=stem_channels)
-        self.decoder = UNetDecoder(self.encoder, num_classes, n_conv_per_stage_decoder, deep_supervision)
+        # ---- encoder ----
+        self.encoder = ResidualEncoder(
+            input_channels=input_channels,
+            n_stages=n_stages,
+            features_per_stage=features_per_stage,
+            conv_op=conv_op,
+            kernel_sizes=kernel_sizes,
+            strides=strides,
+            n_blocks_per_stage=n_blocks_per_stage,
+            conv_bias=conv_bias,
+            norm_op=norm_op,
+            norm_op_kwargs=norm_op_kwargs,
+            dropout_op=dropout_op,
+            dropout_op_kwargs=dropout_op_kwargs,
+            nonlin=nonlin,
+            nonlin_kwargs=nonlin_kwargs,
+            block=block,
+            bottleneck_channels=bottleneck_channels,
+            return_skips=True,
+            disable_default_stem=False,
+            stem_channels=stem_channels
+        )
+
+        # ---- decoder ----
+        self.decoder = UNetDecoder(
+            self.encoder,
+            num_classes,
+            n_conv_per_stage_decoder,
+            deep_supervision,
+            nonlin_first=nonlin_first
+        )
 
     def forward(self, x):
         skips = self.encoder(x)
