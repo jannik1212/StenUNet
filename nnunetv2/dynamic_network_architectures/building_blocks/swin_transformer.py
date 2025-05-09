@@ -225,16 +225,16 @@ class PatchEmbed(nn.Module):
             bias=conv_bias
         )
         if norm_layer is not None:
-            # e.g. InstanceNorm2d or InstanceNorm3d
+            # e.g. nn.InstanceNorm2d or nn.InstanceNorm3d
             self.norm = norm_layer(embed_dim, **(norm_kwargs or {}))
         else:
             self.norm = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x is [B, C, H, W] or [B, C, D, H, W]
+        # x is [B, C, H, W] (2D) or [B, C, D, H, W] (3D)
         x = self.proj(x)
         if self.norm is not None:
-            # apply InstanceNorm2d/3d directly
+            # Apply InstanceNorm2d/3d directly on the conv output
             x = self.norm(x)
         return x
 
@@ -262,7 +262,7 @@ class PatchMerging(nn.Module):
             bias=False
         )
         if norm_layer is not None:
-            # e.g. InstanceNorm2d or InstanceNorm3d
+            # e.g. nn.InstanceNorm2d or nn.InstanceNorm3d
             self.norm = norm_layer(out_dim, **(norm_kwargs or {}))
         else:
             self.norm = None
@@ -271,6 +271,7 @@ class PatchMerging(nn.Module):
         # x is [B, C, H, W] or [B, C, D, H, W]
         x = self.reduction(x)
         if self.norm is not None:
-            # apply InstanceNorm2d/3d directly
+            # Apply InstanceNorm2d/3d directly
             x = self.norm(x)
         return x
+

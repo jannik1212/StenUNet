@@ -11,6 +11,10 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+
+import shutil
+from typing import Union, Tuple
+
 import nnunetv2
 import numpy as np
 from acvl_utils.miscellaneous.ptqdm import ptqdm

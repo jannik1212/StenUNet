@@ -176,19 +176,24 @@ class SwinUNet(nn.Module):
         return seg_outputs[0] if not self.deep_supervision else seg_outputs
 
     def compute_conv_feature_map_size(self, input_size: Tuple[int, ...]) -> int:
+        """
+        Estimate memory footprint of feature maps.
+        """
         sizes = list(input_size)
         total = 0
         # encoder
         for s, pool in enumerate(self.pooling):
+            # use numpy.prod instead of torch.tensor(...) to avoid the warning
             total += self.features_per_stage[s] * int(np.prod(sizes))
             if not isinstance(pool, nn.Identity):
                 for i in range(len(sizes)):
                     sizes[i] //= self.strides[s + 1]
         # bottleneck
-        total += self.features_per_stage[-1] * torch.tensor(sizes).prod().item()
+        total += self.features_per_stage[-1] * int(np.prod(sizes))
         # decoder
         for d in range(len(self.upconvs)):
             for i in range(len(sizes)):
                 sizes[i] *= self.strides[-(d + 1)]
-            total += (self.features_per_stage[-(d + 2)] + self.num_classes) * torch.tensor(sizes).prod().item()
+            # count both feature maps and segmentation maps
+            total += (self.features_per_stage[-(d + 2)] + self.num_classes) * int(np.prod(sizes))
         return int(total)
