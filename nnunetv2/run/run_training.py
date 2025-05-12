@@ -67,29 +67,46 @@ def get_trainer_from_args(dataset_name_or_id: Union[int, str],
     return nnunet_trainer
 
 
-def maybe_load_checkpoint(nnunet_trainer: nnUNetTrainer, continue_training: bool, validation_only: bool,
+def maybe_load_checkpoint(nnunet_trainer: nnUNetTrainer,
+                          continue_training: bool,
+                          validation_only: bool,
                           pretrained_weights_file: str = None):
+    # Always define this up front so it can’t be unbound later
+    expected_checkpoint_file = None
+
     if continue_training:
+        # resume training from an existing checkpoint
         expected_checkpoint_file = join(nnunet_trainer.output_folder, 'checkpoint_final.pth')
         if not isfile(expected_checkpoint_file):
             expected_checkpoint_file = join(nnunet_trainer.output_folder, 'checkpoint_latest.pth')
-        # special case where --c is used to run a previously aborted validation
         if not isfile(expected_checkpoint_file):
             expected_checkpoint_file = join(nnunet_trainer.output_folder, 'checkpoint_best.pth')
         if not isfile(expected_checkpoint_file):
-            print(f"WARNING: Cannot continue training because there seems to be no checkpoint available to "
-                               f"continue from. Starting a new training...")
+            print("WARNING: Cannot continue training because no checkpoint was found. Starting fresh...")
+            expected_checkpoint_file = None
+
     elif validation_only:
+        # only run validation on a finished run
         expected_checkpoint_file = join(nnunet_trainer.output_folder, 'checkpoint_final.pth')
         if not isfile(expected_checkpoint_file):
-            raise RuntimeError(f"Cannot run validation because the training is not finished yet!")
-    else:
-        if pretrained_weights_file is not None:
-            load_pretrained_weights(nnunet_trainer.network, pretrained_weights_file, verbose=True)
-        expected_checkpoint_file = None
+            raise RuntimeError("Cannot run validation because the training is not finished yet!")
 
+    else:
+        # fresh training — optionally load a pretrained model first
+        if pretrained_weights_file is not None:
+            # make sure the network is built
+            if not nnunet_trainer.was_initialized:
+                nnunet_trainer.initialize()
+            load_pretrained_weights(nnunet_trainer.network,
+                                    pretrained_weights_file,
+                                    verbose=True)
+        # we explicitly do *not* set expected_checkpoint_file here,
+        # so it remains None and we won't call load_checkpoint
+
+    # if we have a file to load (only in continue/validation modes), do so now
     if expected_checkpoint_file is not None:
         nnunet_trainer.load_checkpoint(expected_checkpoint_file)
+
 
 
 def setup_ddp(rank, world_size):
