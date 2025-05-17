@@ -656,28 +656,41 @@ class DepTran(nn.Module):
         return out
 
 class Gate(nn.Module):
-
     def __init__(self, in_channels_up, in_channels_down, out_channels):
         super(Gate, self).__init__()
         self.w1 = nn.Sequential(
-            nn.Conv3d(in_channels_up, out_channels, kernel_size=1,stride=1,padding=0,bias=True),
+            nn.Conv3d(in_channels_up, out_channels, kernel_size=1, stride=1, padding=0, bias=True),
             nn.InstanceNorm3d(out_channels)
         )
         self.w2 = nn.Sequential(
-            nn.ConvTranspose3d(in_channels_down,out_channels, kernel_size=2, stride=2, bias=False),
-            nn.Conv3d(out_channels, out_channels, kernel_size=1,stride=1,padding=0,bias=True),
+            nn.ConvTranspose3d(in_channels_down, out_channels, kernel_size=2, stride=2, bias=False),
+            nn.Conv3d(out_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True),
             nn.InstanceNorm3d(out_channels)
         )
         self.relu = nn.LeakyReLU(inplace=True)
         self.psi = nn.Sequential(
-            nn.Conv3d(out_channels, 1, kernel_size=1,stride=1,padding=0,bias=True),
+            nn.Conv3d(out_channels, 1, kernel_size=1, stride=1, padding=0, bias=True),
             nn.InstanceNorm3d(1),
             nn.Sigmoid()
         )
 
     def forward(self, x1, x2):
+        """
+        x1: skip connection feature map
+        x2: decoder feature map to be gated
+        """
         w1 = self.w1(x1)
         w2 = self.w2(x2)
+
+        # If spatial sizes don't match (e.g., odd dims after pooling), upsample x2 to x1's size
+        if w1.shape[2:] != w2.shape[2:]:
+            w2 = F.interpolate(
+                w2,
+                size=w1.shape[2:],
+                mode='trilinear' if w2.dim() == 5 else 'bilinear',
+                align_corners=False
+            )
+
         psi = self.relu(w1 + w2)
         psi = self.psi(psi)
         return x1 * psi
@@ -686,118 +699,158 @@ class Gate(nn.Module):
 
 
 
-class CSA(nn.Module):
-    def __init__(
-            self,
-            in_chans: int,
-            # img_size=(96,96,96),
-            img_size: int,
-            dropout_rate: float = 0.0,
-            save_attn: bool = False,
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class CSA(nn.Module):
+    """
+    Cross-Slice Attention block.
+    Now computes its scale factor from the input shape at runtime,
+    and no longer requires `img_size` in its constructor.
+    """
+    def __init__(
+        self,
+        in_chans: int,
+        dropout_rate: float = 0.0,
+        save_attn: bool = False,
     ) -> None:
         super().__init__()
-        # d, w, h = img_size[0]//16, image_size[1]//16, image_size[2]//16,
-        d = img_size//16
-        h = img_size//16
-        w = img_size//16
-        self.norm = nn.LayerNorm([d,w,h])
-        self.scale =(d*w*h)**-0.5
+        # Channel-wise normalization instead of spatial LayerNorm
+        self.norm = nn.InstanceNorm3d(in_chans, affine=True)
+        # Depth-wise grouped conv to project to QKV
         self.groupconv = nn.Conv3d(
             in_channels=in_chans,
             out_channels=in_chans * 3,
-            kernel_size = 1,
-            groups = in_chans
+            kernel_size=1,
+            groups=in_chans
         )
-        self.q_rearrange = Rearrange("b q d h w-> b q (d h w)", d=d, h=h, w=w)
-        self.k_rearrange = Rearrange("b c d h w-> b c (d h w)", d=d, h=h, w=w)
         self.drop_weights = nn.Dropout(dropout_rate)
-        self.drop_output = nn.Dropout(dropout_rate)
-        self.save_attn = save_attn
-        self.att_mat = torch.Tensor()
-
-
-    def forward(self,x):
-        out = self.norm(x)
-        out = self.groupconv(out)
-        q, k, v = torch.chunk(out, 3, dim=1)
-        q = self.q_rearrange(q)
-        k = self.q_rearrange(k)
-        att_mat = (torch.einsum("bqx,bcx->bqc", q, k) * self.scale).softmax(dim=-1)
-        if self.save_attn:
-            self.att_mat = att_mat.detach()
-        att_mat = self.drop_weights(att_mat)
-        x_out = torch.einsum("bqc,bcdhw->bqdhw", att_mat, v)
-        x_out = self.drop_output(x_out)
-        x_out = x + x_out
-        return x_out
-
-
-
-
-class SSA(nn.Module):
-    def __init__(
-            self,
-            hidden_size: int,
-            img_size: int,
-            num_heads: int,
-            dropout_rate: float = 0.0,
-            qkv_bias: bool = False,
-            save_attn: bool = False,
-            dim_head: int | None = None,
-    ) -> None:
-
-        super().__init__()
-
-        if not (0 <= dropout_rate <= 1):
-            raise ValueError("dropout_rate should be between 0 and 1.")
-
-        if hidden_size % num_heads != 0:
-            raise ValueError("hidden size should be divisible by num_heads.")
-
-        d = img_size//16
-        h = img_size//16
-        w = img_size//16
-        self.re1 = Rearrange("b c d h w-> b d h w c")
-        self.norm = nn.LayerNorm(hidden_size)
-        self.num_heads = num_heads
-        self.dim_head = hidden_size // num_heads if dim_head is None else dim_head
-        self.inner_dim = self.dim_head * num_heads
-
-        self.transpose = Rearrange("b d h w c -> b (d h w) c")
-
-        self.out_proj = nn.Linear(self.inner_dim, hidden_size)
-        self.qkv = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
-        self.input_rearrange = Rearrange("b x (qkv l n) -> qkv b l x n", qkv=3, l=num_heads)
-        self.out_rearrange1 = Rearrange("b l x n -> b x (l n)", l = num_heads, x = d*h*w)
-        self.out_rearrange2 = Rearrange("b (d h w) c-> b d h w c", d=d, h=h, w=w)
-        self.drop_output = nn.Dropout(dropout_rate)
-        self.drop_weights = nn.Dropout(dropout_rate)
-        self.scale = self.dim_head ** -0.5
-        self.save_attn = save_attn
-        self.att_mat = torch.Tensor()
-
-        self.re2 = Rearrange("b d h w c -> b c d h w")
+        self.drop_output  = nn.Dropout(dropout_rate)
+        self.save_attn    = save_attn
+        self.att_mat      = torch.Tensor()
 
     def forward(self, x):
-        out = self.re1(x)
-        out = self.norm(out)
-        out = self.transpose(out)
-        output = self.input_rearrange(self.qkv(out))
-        q, k, v = output[0], output[1], output[2]
-        att_mat = (torch.einsum("blxn,blyn->blxy", q, k) * self.scale).softmax(dim=-1)
-        if self.save_attn:
-            self.att_mat = att_mat.detach()
+        """
+        x: (B, C, D, H, W)
+        returns: (B, C, D, H, W)
+        """
+        # 1) normalize per-channel
+        x_norm = self.norm(x)
 
-        att_mat = self.drop_weights(att_mat)
-        out = torch.einsum("blxy,blyn->blxn", att_mat, v)
-        out = self.out_rearrange1(out)
-        out = self.out_proj(out)
-        out = self.drop_output(out)
-        out = self.out_rearrange2(out)
-        out = self.re2(out)
-        out = out + x
-        return out
+        # 2) compute Q, K, V
+        qkv = self.groupconv(x_norm)               # (B, 3C, D, H, W)
+        q, k, v = torch.chunk(qkv, 3, dim=1)       # each (B, C, D, H, W)
+
+        # 3) flatten to sequences
+        B, C, D, H, W = q.shape
+        N = D * H * W
+        q_flat = q.view(B, C, N)                   # (B, C, N)
+        k_flat = k.view(B, C, N)                   # (B, C, N)
+        v_flat = v.view(B, C, N)                   # (B, C, N)
+
+        # 4) scaled dot-product attention
+        scale = (N) ** -0.5
+        att = torch.einsum("bcn,bcm->bnm", q_flat, k_flat) * scale  # (B, N, N)
+        att = att.softmax(dim=-1)
+        if self.save_attn:
+            self.att_mat = att.detach()
+        att = self.drop_weights(att)
+
+        # 5) apply attention to V
+        out_flat = torch.einsum("bnm,bcm->bcn", att, v_flat)        # (B, C, N)
+        out_flat = self.drop_output(out_flat)
+
+        # 6) reshape and residual
+        out = out_flat.view(B, C, D, H, W)
+        return x + out
+
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from einops import rearrange
+
+class SSA(nn.Module):
+    """
+    Self-Slice Attention block rewritten to infer all spatial dims
+    from the input tensor, so it works for any patch size.
+    """
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        dropout_rate: float = 0.0,
+        qkv_bias: bool = False,
+        save_attn: bool = False,
+        dim_head: int | None = None,
+    ) -> None:
+        super().__init__()
+
+        if hidden_size % num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads")
+
+        self.num_heads = num_heads
+        self.dim_head = (hidden_size // num_heads) if dim_head is None else dim_head
+        self.inner_dim = self.num_heads * self.dim_head
+
+        # We permute to (B, D, H, W, C), apply LayerNorm over C, then back
+        self.norm = nn.LayerNorm(hidden_size)
+
+        # Single Linear to produce QKV for all tokens
+        self.qkv = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
+        self.out_proj = nn.Linear(self.inner_dim, hidden_size)
+
+        self.drop_weights = nn.Dropout(dropout_rate)
+        self.drop_output  = nn.Dropout(dropout_rate)
+        self.save_attn    = save_attn
+        self.att_mat      = torch.Tensor()
+
+    def forward(self, x):
+        """
+        x: (B, C, D, H, W)
+        returns: (B, C, D, H, W)
+        """
+        B, C, D, H, W = x.shape
+
+        # 1) bring features to (B, D, H, W, C) for LayerNorm
+        x_perm = rearrange(x, "b c d h w -> b d h w c")
+        x_norm = self.norm(x_perm)
+
+        # 2) flatten spatial dims to sequence: (B, N, C) where N=D*H*W
+        x_flat = rearrange(x_norm, "b d h w c -> b (d h w) c")
+
+        # 3) compute Q, K, V and split heads
+        qkv = self.qkv(x_flat)  # (B, N, 3 * inner_dim)
+        qkv = rearrange(
+            qkv,
+            "b n (three heads c) -> three b heads n c",
+            three=3, heads=self.num_heads, c=self.dim_head
+        )
+        q, k, v = qkv[0], qkv[1], qkv[2]  # each: (B, heads, N, dim_head)
+
+        # 4) scaled dot-product attention
+        scale = self.dim_head ** -0.5
+        att = torch.einsum("b h n d, b h m d -> b h n m", q * scale, k)
+        att = att.softmax(dim=-1)
+        if self.save_attn:
+            self.att_mat = att.detach()
+        att = self.drop_weights(att)
+
+        # 5) attention × V
+        out = torch.einsum("b h n m, b h m d -> b h n d", att, v)  # (B, heads, N, dim_head)
+        out = rearrange(out, "b h n d -> b n (h d)")               # (B, N, inner_dim)
+        out = self.drop_output(self.out_proj(out))                # (B, N, C)
+
+        # 6) restore spatial layout and channels
+        out = rearrange(out, "b (d h w) c -> b d h w c", d=D, h=H, w=W)
+        out = rearrange(out, "b d h w c -> b c d h w")
+
+        # 7) residual
+        return x + out
+
 
 
 class SABlock(nn.Module):
@@ -966,8 +1019,24 @@ class VSNet(nn.Module):
                                          num_heads=3,depth = depth,
                                          window_size=window_size,normalize=normalize,
                                          downsample=look_up_option(downsample, MERGING_MODE) if isinstance(downsample, str) else downsample)
-        self.CSA = CSA(in_chans=16 *feature_size, img_size=img_size)
-        self.SSA = SSA(hidden_size=16 *feature_size, img_size=img_size, num_heads=3)
+        # cross-slice attention (CSA no longer needs img_size)
+        self.CSA = CSA(
+            in_chans=16 * feature_size,
+            dropout_rate=drop_rate,
+            save_attn=False
+        )
+
+        # self-slice attention: SSA now expects a scalar num_heads
+        # if num_heads is a list (e.g. [3,6,12,24]), pick the first entry
+        scalar_heads = num_heads if isinstance(num_heads, int) else num_heads[0]
+        self.SSA = SSA(
+            hidden_size=16 * feature_size,
+            num_heads=scalar_heads,
+            dropout_rate=drop_rate,
+            qkv_bias=True,
+            save_attn=False
+        )
+
 
 
         self.dt4 = DepTran(in_channels=16 *feature_size,out_channels=16 *feature_size)
@@ -1038,44 +1107,68 @@ class VSNet(nn.Module):
 
 
 
-    def forward(self,x):
-        x1  = self.resuetencoder1(x)
-        x2 = self.resuetencoder2(x1)
-        x2 = self.pool2(x2)
-        x1 = self.gate2(x1,x2)
-        x3 = self.resuetencoder3(x2)
-        x3 = self.pool3(x3)
-        x2 = self.gate3(x2,x3)
-        x4 = self.resuetencoder4(x3)
-        x4 = self.pool4(x4)
-        x3 = self.gate4(x3,x4)
-        x5 = self.swintransformer(x4.contiguous())
+    def forward(self, x):
+        # ---- Encoder ----
+        x1 = self.resuetencoder1(x)           # full res
+        x2 = self.resuetencoder2(x1)          # full res
+        x2 = self.pool2(x2)                   # half res
+        x1 = self.gate2(x1, x2)               # skip1: full res
 
+        x3 = self.resuetencoder3(x2)          # half res
+        x3 = self.pool3(x3)                   # quarter res
+        x2 = self.gate3(x2, x3)               # skip2: half res
+
+        x4 = self.resuetencoder4(x3)          # quarter res
+        x4 = self.pool4(x4)                   # eighth res
+        x3 = self.gate4(x3, x4)               # skip3: quarter res
+
+        # ---- Bottleneck ----
+        x5 = self.swintransformer(x4.contiguous())
         x5 = self.CSA(x5)
         x5 = self.SSA(x5)
 
-        up5 = self.dt4(x5)
-        up4 = self.decoder5(up5, x4)
-        up4 = self.dt3(up4)
-        up3 = self.decoder4(up4, x3)
-        up3 = self.dt2(up3)
-        up2 = self.decoder3(up3, x2)
-        up2 = self.dt1(up2)
-        up1 = self.decoder2(up2, x1)
+        # ---- Decoder with corrected skips ----
+        skip1 = x1   # full
+        skip2 = x2   # half
+        skip3 = x3   # quarter
 
+        # up from 8th → 4th resolution
+        up5 = self.dt4(x5)
+        if up5.shape[2:] != skip3.shape[2:]:
+            skip3 = F.interpolate(skip3, size=up5.shape[2:], mode='trilinear', align_corners=False)
+        up4 = self.decoder5(up5, skip3)
+        up4 = self.dt3(up4)
+
+        # up from 4th → 2nd resolution
+        if up4.shape[2:] != skip2.shape[2:]:
+            skip2 = F.interpolate(skip2, size=up4.shape[2:], mode='trilinear', align_corners=False)
+        up3 = self.decoder4(up4, skip2)
+        up3 = self.dt2(up3)
+
+        # up from 2nd → full resolution
+        if up3.shape[2:] != skip1.shape[2:]:
+            skip1 = F.interpolate(skip1, size=up3.shape[2:], mode='trilinear', align_corners=False)
+        up2 = self.decoder3(up3, skip1)
+        up2 = self.dt1(up2)
+
+        # final up (you reuse skip1 here as per original code)
+        if up2.shape[2:] != skip1.shape[2:]:
+            skip1 = F.interpolate(skip1, size=up2.shape[2:], mode='trilinear', align_corners=False)
+        up1 = self.decoder2(up2, skip1)
+
+        # ---- Heads ----
         seg_v = self.decodercat(up1)
         seg_e = self.decodere_seg(up1)
-        reg = self.decodercl_r(up1)
+        reg   = self.decodercl_r(up1)
 
         deep2 = self.deepsupervision2(up2)
         deep3 = self.deepsupervision3(up3)
 
-
         if self.training:
             return seg_v, reg, seg_e, deep2, deep3
-            # return x5
         else:
             return seg_v
+
 
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -8,3 +8,7 @@ dataset_test_pretrained_own_test/
 
 # ignore prediction files
 pred_comparison/
+
+data/
+
+

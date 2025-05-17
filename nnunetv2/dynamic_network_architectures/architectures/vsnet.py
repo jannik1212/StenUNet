@@ -1,8 +1,8 @@
 # nnunetv2/dynamic_network_architectures/architectures/vsnet.py
 """
-Wrapper for integrating VSNet into the nnU-Net dynamic network architecture API.
-Follows the constructor pattern of other UNet variants for seamless use in get_network_from_plans.
-Signature includes all nnU-Net args so it slots in dynamically; unused ones are noted.
+Thin adapter to integrate the VSNetCore implementation into nnU-Net's dynamic architecture API.
+Matches the constructor signature of other UNet variants so that get_network_from_plans can instantiate seamlessly.
+nnU-Net will resample and crop volumes to size `kernel_sizes[0]` before forwarding, and this `img_size` is derived from it.
 """
 from typing import Union, Type, List, Tuple, Sequence
 import torch
@@ -13,8 +13,10 @@ from torch.nn.modules.dropout import _DropoutNd
 
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim
 
-# Core VSNet implementation should live under vsnet_core/vsnet.py
+# Import the full VSNet implementation from vsnet_core
 from nnunetv2.dynamic_network_architectures.architectures.vsnet_core.vsnet import VSNet as VSNetCore
+
+
 
 
 class VSNet(nn.Module):
@@ -23,7 +25,7 @@ class VSNet(nn.Module):
         input_channels: int,
         n_stages: int,
         features_per_stage: Union[int, List[int], Tuple[int, ...]],
-        # nnU-Net signature-only args (not used by VSNetCore unless forwarded)
+        # nnU-Net signature-only args (not forwarded)
         conv_op: Type[_ConvNd],
         kernel_sizes: Union[int, List[int], Tuple[int, ...]],
         strides: Union[int, List[int], Tuple[int, ...]],
@@ -42,44 +44,62 @@ class VSNet(nn.Module):
     ):
         super().__init__()
         dim = convert_conv_op_to_dim(conv_op)
-        assert dim in (2, 3), "VSNetCore supports only 2D or 3D"
-        self.deep_supervision = deep_supervision
 
-        # dynamic config from nnU-Net plans
-        depth = max(1, n_stages - 1)
-        base_feature_size = (
-            features_per_stage[0] if isinstance(features_per_stage, (list, tuple)) else features_per_stage
+
+        # derive core parameters
+        raw_vs_feature_size = (
+            features_per_stage[0]
+            if isinstance(features_per_stage, (list, tuple))
+            else features_per_stage
         )
+        # adjust feature size so that hidden_size=16*fs divisible by 3 (VSNetCore uses num_heads=3)
+        if raw_vs_feature_size % 3 != 0:
+            vs_feature_size = ((raw_vs_feature_size + 2) // 3) * 3
+        else:
+            vs_feature_size = raw_vs_feature_size
+        vs_depth = n_stages - 1
 
-        # optional forward of dropout to VSNetCore's drop_rate
-        drop_rate = 0.0
-        if dropout_op is not None and dropout_op_kwargs is not None:
-            drop_rate = dropout_op_kwargs.get('p', dropout_op_kwargs.get('prob', 0.0))
+        # dropout settings
+        drop_rate = dropout_op_kwargs.get('p', 0.0) if dropout_op_kwargs else 0.0
+        attn_drop_rate = drop_rate
+        dropout_path_rate = drop_rate
 
-        # instantiate core with dynamic and forwarded args
+        img_size = 96
+
+        # instantiate the core VSNet modele the core VSNet model
         self.net = VSNetCore(
             in_channels=input_channels,
             out_channels=num_classes,
-            depth=depth,
-            feature_size=base_feature_size,
-            # pass through dropout rates
+            depth=vs_depth,
+            img_size=img_size,
+            num_heads=[3] * vs_depth if isinstance(vs_depth, int) else [3],
+            feature_size=vs_feature_size,
             drop_rate=drop_rate,
-            attn_drop_rate=drop_rate,
-            dropout_path_rate=drop_rate,
-            # other VSNetCore args (img_size, num_heads, norm_name, etc.) use defaults
+            attn_drop_rate=attn_drop_rate,
+            dropout_path_rate=dropout_path_rate,
+            spatial_dims=dim
         )
 
-    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, List[torch.Tensor]]:
-        """
-        Forward pass through VSNetCore. Returns final logits or list of outputs for deep supervision.
-        """
-        outputs = self.net(x)
-        if isinstance(outputs, (list, tuple)) and not self.deep_supervision:
-            return outputs[-1]
-        return outputs
+        self.deep_supervision = False
+        self.decoder = nn.Module()
+        self.decoder.supervision = False
 
-    def compute_conv_feature_map_size(self, input_size: Tuple[int, ...]) -> int:
+    def forward(self, x):
         """
-        Approximate footprint by counting final segmentation output pixels/voxels.
+        x: Tensor of shape (B, C, D, H, W)
+        returns either
+          - a single segmentation map Tensor (B, num_classes, D, H, W)
+          - or a list of such maps if deep_supervision=True
         """
-        return int(np.prod(input_size) * self.net.out_channels)
+        out = self.net(x)
+        if self.deep_supervision:
+            return out
+        return out[-1] if isinstance(out, (list, tuple)) else out
+
+    def compute_conv_feature_map_size(self, input_size):
+        # approximate by total voxels times sum of depths if available
+        if hasattr(self.net, 'depths'):
+            total = np.prod(input_size) * sum(self.net.depths)
+        else:
+            total = np.prod(input_size)
+        return int(total)
