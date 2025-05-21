@@ -43,3 +43,26 @@ class CosineAnnealingWithWarmRestarts(CosineAnnealingWarmRestarts):
         return [self.eta_min + (lr - self.eta_min) * (1 + math.cos(math.pi * self.T_cur / self.T_i)) / 2
                 for lr in self.base_lrs]
 
+class PolyMultiGroup(_LRScheduler):
+    """
+    Polynomial decay that preserves each param‐group’s base_lr
+    and clamps the factor to >= 0 once you pass max_steps.
+    """
+    def __init__(self,
+                 optimizer,
+                 max_steps: int,
+                 exponent: float = 0.9,
+                 last_epoch: int = -1):
+        # capture each group's starting LR
+        self.base_lrs = [group['lr'] for group in optimizer.param_groups]
+        self.max_steps = max_steps
+        self.exponent = exponent
+        super().__init__(optimizer, last_epoch, False)
+
+    def get_lr(self):
+        # shared decay factor, but clamped >= 0
+        factor = (1 - min(self.last_epoch, self.max_steps) / self.max_steps)
+        factor = factor ** self.exponent
+        # scale each group's own base_lr
+        return [base_lr * factor for base_lr in self.base_lrs]
+

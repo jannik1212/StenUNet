@@ -44,7 +44,7 @@ from nnunetv2.training.logging.nnunet_logger import nnUNetLogger
 from nnunetv2.training.loss.compound_losses import DC_and_CE_loss, DC_and_BCE_loss,DC_and_topk_loss
 from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
 from nnunetv2.training.loss.dice import get_tp_fp_fn_tn, MemoryEfficientSoftDiceLoss
-from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler,CosineAnnealingWithWarmRestarts
+from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler,CosineAnnealingWithWarmRestarts, PolyMultiGroup
 from nnunetv2.utilities.collate_outputs import collate_outputs
 from nnunetv2.utilities.default_n_proc_DA import get_allowed_n_proc_DA
 from nnunetv2.utilities.file_path_utilities import should_i_save_to_file, check_workers_busy
@@ -135,12 +135,12 @@ class nnUNetTrainer(object):
                 if self.is_cascaded else None
 
         ### Some hyperparameters for you to fiddle with
-        self.initial_lr = 1e-2
+        self.initial_lr = 0.001
         self.weight_decay = 1e-5
         self.oversample_foreground_percent = 0.33#2/3 must contain 
-        self.num_iterations_per_epoch = 400
+        self.num_iterations_per_epoch = 300
         self.num_val_iterations_per_epoch = 100
-        self.num_epochs = 300
+        self.num_epochs = 120
         self.current_epoch = 0
 
         ### Dealing with labels/regions
@@ -450,14 +450,36 @@ class nnUNetTrainer(object):
             self.print_to_log_file('These are the global plan.json settings:\n', dct, '\n', add_timestamp=False)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay,
-                                    momentum=0.99, nesterov=True)
-        lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs)
+        # For endocer and decoder same rates
+        #optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay,
+        #                            momentum=0.99, nesterov=True)
+
+        #lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs) #default
         #lr_scheduler = CosineAnnealingWithWarmRestarts(optimizer, T_0=5)
         
         #optimizer = torch.optim.Adam(self.network.parameters(), lr=self.initial_lr, betas=(0.9, 0.999), weight_decay=self.weight_decay)
         #lr_scheduler = CosineAnnealingLR(optimizer, T_max = self.num_epochs, eta_min=5e-6)
-    
+
+        # For different setups
+        # Split encoder vs. decoder parameters for two-LR setup
+        enc_params = [p for n, p in self.network.named_parameters() if n.startswith("encoder")]
+        dec_params = [p for n, p in self.network.named_parameters() if not n.startswith("encoder")]
+
+        # Two-group optimizer: lower LR on encoder, full LR on decoder
+        optimizer = torch.optim.SGD(
+            [
+                {"params": enc_params, "lr": self.initial_lr * 0.1},
+                {"params": dec_params, "lr": self.initial_lr},
+            ],
+            weight_decay=self.weight_decay,
+            momentum=0.99,
+            nesterov=True
+        )
+
+        # Use the poly scheduler
+        lr_scheduler = PolyMultiGroup(optimizer, max_steps=self.num_epochs, exponent=0.9)
+        lr_scheduler = CosineAnnealingWithWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+                                          
         return optimizer, lr_scheduler
 
     def plot_network_architecture(self):
@@ -831,11 +853,11 @@ class nnUNetTrainer(object):
 
     def on_train_epoch_start(self):
         self.network.train()
-        self.lr_scheduler.step(self.current_epoch)
         self.print_to_log_file('')
         self.print_to_log_file(f'Epoch {self.current_epoch}')
-        self.print_to_log_file(
-            f"Current learning rate: {np.round(self.optimizer.param_groups[0]['lr'], decimals=5)}")
+        lrs = [g['lr'] for g in self.optimizer.param_groups]
+        self.print_to_log_file(f"Current LRs → encoder: {lrs[0]:.5f}, decoder: {lrs[1]:.5f}")
+
         # lrs are the same for all workers so we don't need to gather them in case of DDP training
         self.logger.log('lrs', self.optimizer.param_groups[0]['lr'], self.current_epoch)
 
@@ -873,6 +895,7 @@ class nnUNetTrainer(object):
 
     def on_train_epoch_end(self, train_outputs: List[dict]):
         outputs = collate_outputs(train_outputs)
+        self.lr_scheduler.step()
 
         if self.is_ddp:
             losses_tr = [None for _ in range(dist.get_world_size())]
