@@ -451,10 +451,10 @@ class nnUNetTrainer(object):
 
     def configure_optimizers(self):
         # For endocer and decoder same rates
-        #optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay,
-        #                            momentum=0.99, nesterov=True)
+        optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay,
+                                    momentum=0.99, nesterov=True)
 
-        #lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs) #default
+        lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs) #default
         #lr_scheduler = CosineAnnealingWithWarmRestarts(optimizer, T_0=5)
         
         #optimizer = torch.optim.Adam(self.network.parameters(), lr=self.initial_lr, betas=(0.9, 0.999), weight_decay=self.weight_decay)
@@ -462,23 +462,23 @@ class nnUNetTrainer(object):
 
         # For different setups
         # Split encoder vs. decoder parameters for two-LR setup
-        enc_params = [p for n, p in self.network.named_parameters() if n.startswith("encoder")]
-        dec_params = [p for n, p in self.network.named_parameters() if not n.startswith("encoder")]
+        #enc_params = [p for n, p in self.network.named_parameters() if n.startswith("encoder")]
+        #dec_params = [p for n, p in self.network.named_parameters() if not n.startswith("encoder")]
 
         # Two-group optimizer: lower LR on encoder, full LR on decoder
-        optimizer = torch.optim.SGD(
-            [
-                {"params": enc_params, "lr": self.initial_lr * 0.1},
-                {"params": dec_params, "lr": self.initial_lr},
-            ],
-            weight_decay=self.weight_decay,
-            momentum=0.99,
-            nesterov=True
-        )
+        #optimizer = torch.optim.SGD(
+        #    [
+        #        {"params": enc_params, "lr": self.initial_lr * 0.1},
+        #        {"params": dec_params, "lr": self.initial_lr},
+        #    ],
+        #    weight_decay=self.weight_decay,
+        #    momentum=0.99,
+        #    nesterov=True
+        #)
 
         # Use the poly scheduler
-        lr_scheduler = PolyMultiGroup(optimizer, max_steps=self.num_epochs, exponent=0.9)
-        lr_scheduler = CosineAnnealingWithWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+        #lr_scheduler = PolyMultiGroup(optimizer, max_steps=self.num_epochs, exponent=0.9)
+        #lr_scheduler = CosineAnnealingWithWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
                                           
         return optimizer, lr_scheduler
 

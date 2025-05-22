@@ -17,6 +17,6 @@ if __name__ == "__main__":
     plan_experiments(args.d)
     
     print('Preprocessing...')
-    preprocess_dataset(args.d, configurations=('2d',),num_processes=(8,))
+    preprocess_dataset(args.d, configurations=('3d_fullres',),num_processes=(8,))
     
    

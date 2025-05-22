@@ -9,14 +9,14 @@ import torch.nn.functional as F
 from typing import Union, List, Tuple, Type
 from torch.nn.modules.conv import _ConvNd
 
-from dynamic_network_architectures.building_blocks.attention_blocks_vsnet import CSA, SSA
-from dynamic_network_architectures.building_blocks.conv_blocks_vsnet import DepTran, Gate
-from dynamic_network_architectures.building_blocks.swin_blocks_vsnet import SwinLayer, PatchMerging
+from nnunetv2.dynamic_network_architectures.building_blocks.attention_blocks_vsnet import CSA, SSA
+from nnunetv2.dynamic_network_architectures.building_blocks.conv_blocks_vsnet import DepTran, Gate
+from nnunetv2.dynamic_network_architectures.building_blocks.swin_blocks_vsnet import SwinLayer, PatchMerging
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import (
     convert_conv_op_to_dim,
     get_matching_convtransp
 )
-from dynamic_network_architectures.building_blocks.unetr_blocks import ConvStackND
+from nnunetv2.dynamic_network_architectures.building_blocks.unetr_blocks import ConvStackND
 
 
 class VSNet(nn.Module):
@@ -74,8 +74,54 @@ class VSNet(nn.Module):
         self.decoder     = nn.Module()
         self.decoder.deep_supervision = deep_supervision
 
+        def _to_list(x, length):
+            return x if isinstance(x, (list, tuple)) else [x] * length
+         # <<< Add these three lines to capture what you need later >>>
+        
+        self._features = list(features_per_stage)
+        self._strides = _to_list(strides, 4)
+        self._num_classes = 2               # integer
+
     def forward(self, x: torch.Tensor):
         return self.net(x)
+    
+    def compute_conv_feature_map_size(self, input_size: Tuple[int, ...]) -> int:
+        """
+        Estimate total feature‐map elements for VRAM planning.
+        Mirrors nnUNet's encoder→bottleneck→decoder counting.
+        """
+        sizes = list(input_size)  # e.g. [D, H, W]
+        total = 0
+
+        # --- encoder ---
+        for stage in range(4):
+            c = self._features[stage]
+            total += c * int(torch.prod(torch.tensor(sizes)))
+            if stage < 3:
+                for d in range(len(sizes)):
+                    sizes[d] //= self._strides[stage + 1]
+
+        # --- bottleneck ---
+        c = self._features[-1]
+        total += c * int(torch.prod(torch.tensor(sizes)))
+
+        # decoder + seg heads (with correct per‐stage feature counts)
+        dec_features = [
+            self._features[2],
+            self._features[1],
+            self._features[0],
+            self._features[0],
+        ]
+
+        for dec_i in range(4):
+            # unpool
+            for d in range(len(sizes)):
+                sizes[d] *= self._strides[-(dec_i + 1)]
+            c = dec_features[dec_i]
+            total += c * int(torch.prod(torch.tensor(sizes)))
+            total += self._num_classes * int(torch.prod(torch.tensor(sizes)))
+
+        return int(total)
 
 
 class VSNetCore(nn.Module):
@@ -156,8 +202,24 @@ class VSNetCore(nn.Module):
             dim=features[-1], depth=convs[-1], num_heads=features[-1]//features[0],
             window_size=(7,7,7), downsample=PatchMerging
         )
-        self.CSA = CSA(in_chans=features[-1], img_size=kernel_sizes[0])
-        self.SSA = SSA(hidden_size=features[-1], img_size=kernel_sizes[0], num_heads=features[-1]//features[0])
+        # new
+        # basic channel‐attention over the last encoder channels
+        self.CSA = CSA(
+            in_chans=features[-1],
+            dropout_rate=0.0,   # or whatever you want
+            save_attn=False
+        )
+
+        # spatial‐attention: one head per (features[-1]//features[0])
+        self.SSA = SSA(
+            hidden_size=features[-1],
+            num_heads=features[-1] // features[0],
+            dropout_rate=0.0,   # optional
+            qkv_bias=False,     # optional
+            save_attn=False,    # optional
+            dim_head=None       # use default hidden_size//num_heads
+        )
+
 
         # depth-transfer
         self.dt = nn.ModuleList([DepTran(f, f) for f in 

@@ -98,6 +98,7 @@ class ConvStackND(nn.Module):
                  conv_op: Type[_ConvNd],
                  conv_bias: bool = False,
                  norm_op: Type[nn.Module] = None,
+                 norm_op_kwargs: dict = None,
                  norm_kwargs: dict = None,
                  dropout_op: Type[nn.Module] = None,
                  dropout_op_kwargs: dict = None,

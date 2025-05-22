@@ -2,14 +2,15 @@ import shutil
 from copy import deepcopy
 from functools import lru_cache
 from typing import List, Union, Tuple, Type
+import torch.nn as nn
 
 import numpy as np
 from batchgenerators.utilities.file_and_folder_operations import load_json, join, save_json, isfile, maybe_mkdir_p
 from nnunetv2.dynamic_network_architectures.architectures.unet import PlainConvUNet, ResidualEncoderUNet
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
 from nnunetv2.dynamic_network_architectures.architectures.swin_unet import SwinUNet
-from dynamic_network_architectures.architectures.unetr import UNETR
-from dynamic_network_architectures.architectures.vsnet import VSNet
+from nnunetv2.dynamic_network_architectures.architectures.unetr import UNETR
+from nnunetv2.dynamic_network_architectures.architectures.vsnet import VSNet
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_dim_to_conv_op, get_matching_instancenorm
 
 from nnunetv2.configuration import ANISO_THRESHOLD
@@ -49,7 +50,7 @@ class ExperimentPlanner(object):
         self.anisotropy_threshold = ANISO_THRESHOLD
 
         self.UNet_base_num_features = 32
-        self.UNet_class = VSNet # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet, UNETR
+        self.UNet_class = UNETR # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet, UNETR
         # the following two numbers are really arbitrary and were set to reproduce nnU-Net v1's configurations as
         # much as possible
         self.UNet_reference_val_3d = 560000000  # 455600128  550000000
@@ -87,32 +88,105 @@ class ExperimentPlanner(object):
                                                                                  training_identifiers[0] + '_0000' +
                                                                                  self.dataset_json['file_ending']))
 
+
     @staticmethod
-    @lru_cache(maxsize=None)
-    def static_estimate_VRAM_usage(patch_size: Tuple[int],
-                                   n_stages: int,
-                                   strides: Union[int, List[int], Tuple[int, ...]],
-                                   UNet_class: Union[Type[PlainConvUNet], Type[ResidualEncoderUNet]],
-                                   num_input_channels: int,
-                                   features_per_stage: Tuple[int],
-                                   blocks_per_stage_encoder: Union[int, Tuple[int]],
-                                   blocks_per_stage_decoder: Union[int, Tuple[int]],
-                                   num_labels: int):
+    @lru_cache(None)
+    def static_estimate_VRAM_usage(
+        patch_size: Tuple[int, ...],
+        n_stages: int,
+        strides: Union[int, List[int], Tuple[int, ...]],
+        UNet_class: Type,
+        num_input_channels: int,
+        features_per_stage: Tuple[int, ...],
+        blocks_per_stage_encoder: Union[int, Tuple[int, ...]],
+        blocks_per_stage_decoder: Union[int, Tuple[int, ...]],
+        num_labels: int
+    ) -> int:
         """
-        Works for PlainConvUNet, ResidualEncoderUNet
+        Estimate total feature‐map elements for VRAM planning.
+        Supports:
+          - PlainConvUNet & ResidualEncoderUNet (any dim)
+          - VSNet (only 3D)
+          - else: fallback to PlainConvUNet
         """
-        dim = len(patch_size)
+        dim     = len(patch_size)
         conv_op = convert_dim_to_conv_op(dim)
         norm_op = get_matching_instancenorm(conv_op)
-        net = UNet_class(num_input_channels, n_stages,
-                         features_per_stage,
-                         conv_op,
-                         3,
-                         strides,
-                         blocks_per_stage_encoder,
-                         num_labels,
-                         blocks_per_stage_decoder,
-                         norm_op=norm_op)
+
+        # 1) Plain / Residual U-Net
+        if UNet_class in (PlainConvUNet, ResidualEncoderUNet):
+            net = UNet_class(
+                num_input_channels,
+                n_stages,
+                features_per_stage,
+                conv_op,
+                3,  # conv kernel size
+                strides,
+                blocks_per_stage_encoder,
+                num_labels,
+                blocks_per_stage_decoder,
+                norm_op=norm_op
+            )
+            return net.compute_conv_feature_map_size(patch_size)
+
+        # 2) 3D VSNet
+        if UNet_class is VSNet and dim == 3:
+            vsn = 4
+
+            # pad/truncate to length 4
+            fps = list(features_per_stage)
+            fps = (fps + [fps[-1]] * vsn)[:vsn]
+
+            if isinstance(strides, int):
+                strides4 = [strides] * vsn
+            else:
+                strides4 = list(strides)[:vsn]
+
+            if isinstance(blocks_per_stage_encoder, (list, tuple)):
+                enc4 = tuple(blocks_per_stage_encoder[:vsn])
+            else:
+                enc4 = (blocks_per_stage_encoder,) * vsn
+
+            if isinstance(blocks_per_stage_decoder, (list, tuple)):
+                dec_src = list(blocks_per_stage_decoder)
+            else:
+                dec_src = [blocks_per_stage_decoder]
+            dec4 = (dec_src + [dec_src[-1]] * vsn)[:vsn]
+
+            net = VSNet(
+                input_channels=num_input_channels,
+                n_stages=vsn,
+                features_per_stage=tuple(fps),
+                conv_op=conv_op,
+                kernel_sizes=strides4,
+                strides=strides4,
+                n_conv_per_stage=enc4,
+                num_classes=num_labels,
+                n_conv_per_stage_decoder=tuple(dec4),
+                conv_bias=True,
+                norm_op=norm_op,
+                norm_op_kwargs={},
+                dropout_op=None,
+                dropout_op_kwargs=None,
+                nonlin=nn.GELU,
+                nonlin_kwargs={},
+                deep_supervision=False
+            )
+            return net.compute_conv_feature_map_size(patch_size)
+
+        # 3) Fallback: use PlainConvUNet
+        net = PlainConvUNet(
+            num_input_channels,
+            n_stages,
+            features_per_stage,
+            conv_op,
+            3,  # conv kernel size
+            strides,
+            blocks_per_stage_encoder,
+            num_labels,
+            blocks_per_stage_decoder,
+            norm_op=norm_op
+        )
         return net.compute_conv_feature_map_size(patch_size)
 
     def determine_resampling(self, *args, **kwargs):
@@ -370,6 +444,17 @@ class ExperimentPlanner(object):
             'resampling_fn_probabilities': resampling_softmax.__name__,
             'resampling_fn_probabilities_kwargs': resampling_softmax_kwargs,
         }
+        if plan['UNet_class_name'] == 'VSNet':
+            vsn = 4
+            plan['conv_kernel_sizes'] = plan['conv_kernel_sizes'][:vsn]
+            plan['pool_op_kernel_sizes'] = plan['pool_op_kernel_sizes'][:vsn]
+            plan['n_conv_per_stage_encoder'] = plan['n_conv_per_stage_encoder'][:vsn]
+            # decoder has one fewer stage
+            plan['n_conv_per_stage_decoder'] = plan['n_conv_per_stage_decoder'][:vsn - 1]
+            plan['UNet_base_num_features'] = plan['UNet_base_num_features']  # unchanged
+            plan['UNet_class_name'] = 'VSNet'  # still VSNet
+
+         
         return plan
 
     def plan_experiment(self):

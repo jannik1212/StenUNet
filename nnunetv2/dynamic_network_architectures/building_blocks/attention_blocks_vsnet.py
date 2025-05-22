@@ -1,4 +1,3 @@
-# dynamic_network_architectures/building_blocks/attention_blocks.py
 """
 Self-attention variants for VSNet: CSA (Channel Self-Attention), SSA (Spatial Self-Attention), and a generic SABlock.
 """
@@ -15,50 +14,57 @@ class CSA(nn.Module):
     def __init__(
         self,
         in_chans: int,
-        img_size: int,
         dropout_rate: float = 0.0,
         save_attn: bool = False
     ):
         super().__init__()
-        d = img_size // 16
-        h = img_size // 16
-        w = img_size // 16
-        self.norm = nn.LayerNorm([d, h, w])
-        self.scale = (d * h * w) ** -0.5
+        # LayerNorm over the channel dimension at each (d,h,w)
+        self.norm = nn.LayerNorm(in_chans)
+        # project into Q/K/V via depthwise conv
         self.groupconv = nn.Conv3d(
             in_channels=in_chans,
             out_channels=in_chans * 3,
             kernel_size=1,
             groups=in_chans
         )
-        self.q_rearrange = rearrange
-        self.k_rearrange = rearrange
         self.drop_weights = nn.Dropout(dropout_rate)
-        self.drop_output = nn.Dropout(dropout_rate)
-        self.save_attn = save_attn
-        self.att_mat = torch.Tensor()
+        self.drop_output  = nn.Dropout(dropout_rate)
+        self.save_attn    = save_attn
+        self.att_mat      = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, D, H, W)
-        out = self.norm(x)
-        out = self.groupconv(out)
-        q, k, v = torch.chunk(out, 3, dim=1)
-        # reshape: q: B, Cq/ , D,H,W -> B, Q, D*H*W
-        B, C3, D, H, W = out.shape
-        # channels split gives same C each
-        C = C3 // 3
-        q = rearrange(q, 'b c d h w -> b c (d h w)')
-        k = rearrange(k, 'b c d h w -> b c (d h w)')
-        attn = torch.einsum('bqc, bkc -> bqk', q, k) * self.scale
+        B, C, D, H, W = x.shape
+
+        # 1) normalize over channels at each spatial position
+        y = x.permute(0, 2, 3, 4, 1)      # (B, D, H, W, C)
+        y = self.norm(y)                 # LayerNorm on C
+        y = y.permute(0, 4, 1, 2, 3)     # (B, C, D, H, W)
+
+        # 2) get Q, K, V
+        y = self.groupconv(y)            # (B, 3C, D, H, W)
+        q, k, v = torch.chunk(y, 3, dim=1)  # each (B, C, D, H, W)
+
+        # 3) flatten spatial dims
+        N = D * H * W
+        q = rearrange(q, 'b c d h w -> b c (d h w)')  # (B, C, N)
+        k = rearrange(k, 'b c d h w -> b c (d h w)')  # (B, C, N)
+        v = rearrange(v, 'b c d h w -> b c (d h w)')  # (B, C, N)
+
+        # 4) channel-wise attention
+        scale = N ** -0.5
+        attn = torch.einsum('bcn,bkn->bck', q, k) * scale  # (B, C, C)
         attn = attn.softmax(dim=-1)
         if self.save_attn:
             self.att_mat = attn.detach()
         attn = self.drop_weights(attn)
-        v = rearrange(v, 'b c d h w -> b c (d h w)')
-        out2 = torch.einsum('bqk, bkv -> bqv', attn, v)
-        out2 = rearrange(out2, 'b c (d h w) -> b c d h w', d=D, h=H, w=W)
-        out2 = self.drop_output(out2)
-        return x + out2
+
+        # 5) apply to V and reshape back
+        out = torch.einsum('bck,bkn->bcn', attn, v)        # (B, C, N)
+        out = out.view(B, C, D, H, W)                      # (B, C, D, H, W)
+        out = self.drop_output(out)
+
+        return x + out
 
 
 class SSA(nn.Module):
@@ -68,7 +74,6 @@ class SSA(nn.Module):
     def __init__(
         self,
         hidden_size: int,
-        img_size: int,
         num_heads: int,
         dropout_rate: float = 0.0,
         qkv_bias: bool = False,
@@ -77,45 +82,52 @@ class SSA(nn.Module):
     ):
         super().__init__()
         self.num_heads = num_heads
-        self.dim_head = hidden_size // num_heads if dim_head is None else dim_head
+        self.dim_head  = hidden_size // num_heads if dim_head is None else dim_head
         self.inner_dim = self.dim_head * num_heads
-        self.scale = self.dim_head ** -0.5
-        d = img_size // 16
-        h = img_size // 16
-        w = img_size // 16
-        self.input_rearrange = rearrange
-        self.out_proj = nn.Linear(self.inner_dim, hidden_size)
-        self.qkv = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
+        self.scale     = self.dim_head ** -0.5
+
+        # project into Q/K/V
+        self.qkv        = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
+        self.out_proj   = nn.Linear(self.inner_dim, hidden_size)
         self.drop_weights = nn.Dropout(dropout_rate)
-        self.drop_output = nn.Dropout(dropout_rate)
-        self.save_attn = save_attn
-        self.att_mat = torch.Tensor()
+        self.drop_output  = nn.Dropout(dropout_rate)
+        self.save_attn    = save_attn
+        self.att_mat      = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, D, H, W)
         B, C, D, H, W = x.shape
-        # rearrange to (B, D*H*W, C)
-        tokens = rearrange(x, 'b c d h w -> b (d h w) c')
-        qkv = self.qkv(tokens)
-        qkv = qkv.reshape(B, tokens.shape[1], 3, self.num_heads, self.dim_head)
-        qkv = qkv.permute(2, 0, 3, 1, 4)  # [3, B, heads, L, dim]
+
+        # 1) flatten spatial dims into tokens
+        tokens = rearrange(x, 'b c d h w -> b (d h w) c')  # (B, N, C), N=D*H*W
+
+        # 2) Q/K/V
+        qkv = self.qkv(tokens)                             # (B, N, 3*inner_dim)
+        qkv = qkv.view(B, -1, 3, self.num_heads, self.dim_head)
+        qkv = qkv.permute(2, 0, 3, 1, 4)                    # (3, B, heads, N, dim_head)
         q, k, v = qkv[0], qkv[1], qkv[2]
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+
+        # 3) spatial attention
+        attn = (q @ k.transpose(-2, -1)) * self.scale      # (B, heads, N, N)
         attn = attn.softmax(dim=-1)
         if self.save_attn:
             self.att_mat = attn.detach()
         attn = self.drop_weights(attn)
-        out = attn @ v  # [B, heads, L, dim]
-        out = out.permute(0, 2, 1, 3).reshape(B, tokens.shape[1], self.inner_dim)
-        out = self.out_proj(out)
+
+        # 4) apply to V
+        out = attn @ v                                     # (B, heads, N, dim_head)
+        out = out.permute(0, 2, 1, 3).reshape(B, -1, self.inner_dim)  # (B, N, inner_dim)
+        out = self.out_proj(out)                           # (B, N, C)
         out = self.drop_output(out)
+
+        # 5) reshape back to (B, C, D, H, W)
         out = rearrange(out, 'b (d h w) c -> b c d h w', d=D, h=H, w=W)
         return x + out
 
 
 class SABlock(nn.Module):
     """
-    Generic self-attention block (ViT-style) for feature maps.
+    Generic self-attention block (ViT-style) for 2D or 3D feature maps.
     """
     def __init__(
         self,
@@ -128,40 +140,50 @@ class SABlock(nn.Module):
     ):
         super().__init__()
         self.num_heads = num_heads
-        self.dim_head = hidden_size // num_heads if dim_head is None else dim_head
+        self.dim_head  = hidden_size // num_heads if dim_head is None else dim_head
         self.inner_dim = self.dim_head * num_heads
-        self.scale = self.dim_head ** -0.5
-        self.qkv = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
-        self.input_rearrange = rearrange
-        self.out_proj = nn.Linear(self.inner_dim, hidden_size)
+        self.scale     = self.dim_head ** -0.5
+
+        self.qkv          = nn.Linear(hidden_size, self.inner_dim * 3, bias=qkv_bias)
+        self.out_proj     = nn.Linear(self.inner_dim, hidden_size)
         self.drop_weights = nn.Dropout(dropout_rate)
-        self.drop_output = nn.Dropout(dropout_rate)
-        self.save_attn = save_attn
-        self.att_mat = torch.Tensor()
+        self.drop_output  = nn.Dropout(dropout_rate)
+        self.save_attn    = save_attn
+        self.att_mat      = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B, C, H, W) or (B, N, hidden_size)
-        # flatten spatial dims if needed
-        B, C, *sp = x.shape
-        if len(sp) > 1:
-            L = sp[0] * sp[1] if len(sp) == 2 else sp[0] * sp[1] * sp[2]
+        # support x: (B, C, H, W), (B, C, D, H, W) or (B, N, hidden_size)
+        B, C, *S = x.shape
+
+        # flatten spatial dims if present
+        if len(S) > 1:
+            L = int(torch.prod(torch.tensor(S)))
             tokens = rearrange(x, 'b c ... -> b (...) c')
         else:
             tokens = x
-        B, L, _ = tokens.shape
-        qkv = self.qkv(tokens).reshape(B, L, 3, self.num_heads, self.dim_head)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
+            L = tokens.shape[1]
+
+        # Q/K/V
+        qkv = self.qkv(tokens).view(B, L, 3, self.num_heads, self.dim_head)
+        qkv = qkv.permute(2, 0, 3, 1, 4)                  # (3, B, heads, L, dim_head)
         q, k, v = qkv[0], qkv[1], qkv[2]
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+
+        # attention
+        attn = (q @ k.transpose(-2, -1)) * self.scale    # (B, heads, L, L)
         attn = attn.softmax(dim=-1)
         if self.save_attn:
             self.att_mat = attn.detach()
         attn = self.drop_weights(attn)
+
+        # apply to V
         out = (attn @ v).transpose(1, 2).reshape(B, L, self.inner_dim)
         out = self.out_proj(out)
         out = self.drop_output(out)
-        if len(sp) > 1:
-            x_out = rearrange(out, 'b (d h w) c -> b c d h w', d=sp[0], h=sp[1], w=sp[2]) if len(sp) == 3 else rearrange(out, 'b (h w) c -> b c h w', h=sp[0], w=sp[1])
-        else:
-            x_out = out
-        return x + x_out
+
+        # reshape back if needed
+        if len(S) > 1:
+            if len(S) == 3:
+                out = rearrange(out, 'b (d h w) c -> b c d h w', d=S[0], h=S[1], w=S[2])
+            else:
+                out = rearrange(out, 'b (h w) c -> b c h w', h=S[0], w=S[1])
+        return x + out

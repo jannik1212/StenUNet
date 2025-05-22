@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Sequence, Optional, List, Tuple, Type, Union
 
-from dynamic_network_architectures.building_blocks.vsnet_utils import (
+from nnunetv2.dynamic_network_architectures.building_blocks.vsnet_utils import (
     window_partition,
     window_reverse,
     get_window_size,

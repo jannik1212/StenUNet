@@ -26,5 +26,5 @@ if __name__ == "__main__":
 
     
     print('Training...')
-    run_training(args.d, configuration='2d', fold = args.fold, pretrained_weights = args.pretrained_weights, device = torch.device(args.device))
+    run_training(args.d, configuration='3d_fullres', fold = args.fold, pretrained_weights = args.pretrained_weights, device = torch.device(args.device))
     
