@@ -8,7 +8,8 @@ from batchgenerators.utilities.file_and_folder_operations import load_json, join
 from nnunetv2.dynamic_network_architectures.architectures.unet import PlainConvUNet, ResidualEncoderUNet
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
 from nnunetv2.dynamic_network_architectures.architectures.swin_unet import SwinUNet
-from nnunetv2.dynamic_network_architectures.architectures.vsnet import VSNet
+from dynamic_network_architectures.architectures.unetr import UNETR
+from dynamic_network_architectures.architectures.vsnet import VSNet
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_dim_to_conv_op, get_matching_instancenorm
 
 from nnunetv2.configuration import ANISO_THRESHOLD
@@ -48,7 +49,7 @@ class ExperimentPlanner(object):
         self.anisotropy_threshold = ANISO_THRESHOLD
 
         self.UNet_base_num_features = 32
-        self.UNet_class = VSNet # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet
+        self.UNet_class = VSNet # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet, UNETR
         # the following two numbers are really arbitrary and were set to reproduce nnU-Net v1's configurations as
         # much as possible
         self.UNet_reference_val_3d = 560000000  # 455600128  550000000

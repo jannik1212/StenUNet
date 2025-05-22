@@ -6,9 +6,9 @@ from skimage.filters import frangi
 
 # ---- Configuration ----
 # Adjust this to your dataset folder path
-input_dir = 'data/imagesTr'
+input_dir = 'own_scripts/arcade/frangi_masks'
 # Output folder for Frangi masks (for label 0001)
-output_dir = 'pre_process/frangi_masks'
+output_dir = 'pre_process/frangi_masks_real'
 # Make sure the output directory exists
 os.makedirs(output_dir, exist_ok=True)
 

@@ -2,23 +2,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.conv import _ConvNd
-from typing import Union, Type, List, Tuple, Union
+from typing import Union, Type, List, Tuple
 import numpy as np
 
-from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim, get_matching_convtransp
-from nnunetv2.dynamic_network_architectures.architectures.unet_attention import ConvStack
-
-from nnunetv2.dynamic_network_architectures.building_blocks.swin_transformer import (
-    SwinTransformerBlock, PatchEmbed, PatchMerging
-)
-from nnunetv2.dynamic_network_architectures.architectures.unet_attention import ConvStack
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import (
-    convert_conv_op_to_dim, get_matching_convtransp
+    convert_conv_op_to_dim,
+    get_matching_convtransp
 )
+from nnunetv2.dynamic_network_architectures.architectures.unet_attention import ConvStack
+from nnunetv2.dynamic_network_architectures.building_blocks.swin_transformer import (
+    SwinTransformerBlock,
+    PatchEmbed,
+    PatchMerging
+)
+
 
 class SwinUNet(nn.Module):
     """
-    Dynamic Swin-UNet supporting 2D/3D segmentation in nnU-Net.
+    Dynamic Swin-UNet supporting 2D/3D segmentation in nnU-Net,
+    with explicit kernel_size control for upsampling.
     """
     def __init__(
         self,
@@ -47,15 +49,21 @@ class SwinUNet(nn.Module):
         dim = convert_conv_op_to_dim(conv_op)
         assert dim in (2, 3), "SwinUNet only supports 2D or 3D."
 
+        # normalize list args
+        if isinstance(features_per_stage, int):
+            features_per_stage = [features_per_stage] * n_stages
         if isinstance(n_conv_per_stage, int):
             n_conv_per_stage = [n_conv_per_stage] * n_stages
         if isinstance(n_conv_per_stage_decoder, int):
             n_conv_per_stage_decoder = [n_conv_per_stage_decoder] * (n_stages - 1)
         if isinstance(strides, int):
             strides = [strides] * n_stages
+        if isinstance(kernel_sizes, int):
+            kernel_sizes = [kernel_sizes] * (n_stages - 1)
 
         self.features_per_stage = list(features_per_stage)
         self.strides = strides
+        self.kernel_sizes = kernel_sizes
         base = self.features_per_stage[0]
         self.num_heads = [f // base for f in self.features_per_stage]
         self.window_size = 7
@@ -116,15 +124,19 @@ class SwinUNet(nn.Module):
         self.decoders = nn.ModuleList()
         self.seg_layers = nn.ModuleList()
         for d in range(n_stages - 2, -1, -1):
+            ks = self.kernel_sizes[d + 1]
+            st = self.strides[d + 1]
+            # upsample
             self.upconvs.append(
                 transpconv_op(
                     self.features_per_stage[d + 1],
                     self.features_per_stage[d],
-                    kernel_size=strides[d + 1],
-                    stride=strides[d + 1],
+                    kernel_size=ks,
+                    stride=st,
                     bias=conv_bias
                 )
             )
+            # conv stack
             self.decoders.append(
                 ConvStack(
                     in_channels=self.features_per_stage[d] * 2,
@@ -139,6 +151,7 @@ class SwinUNet(nn.Module):
                     nonlin_kwargs=nonlin_kwargs
                 )
             )
+            # segmentation head
             self.seg_layers.append(
                 conv_op(
                     self.features_per_stage[d],
@@ -150,10 +163,11 @@ class SwinUNet(nn.Module):
                 )
             )
 
+        # flag holder for deep supervision
         self.decoder = nn.Module()
         self.decoder.deep_supervision = self.deep_supervision
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, List[torch.Tensor]]:
         x = self.patch_embed(x)
         skips = []
         for enc, pool in zip(self.encoders, self.pooling):
@@ -167,23 +181,26 @@ class SwinUNet(nn.Module):
             x = up(x)
             skip = skips[-(i + 2)]
             if x.shape[2:] != skip.shape[2:]:
-                x = F.interpolate(x, size=skip.shape[2:], mode='trilinear' if x.dim()==5 else 'bilinear', align_corners=False)
+                mode = 'trilinear' if x.dim() == 5 else 'bilinear'
+                x = F.interpolate(x, size=skip.shape[2:], mode=mode, align_corners=False)
             x = torch.cat((skip, x), dim=1)
             x = dec(x)
             seg_outputs.append(seg(x))
 
         seg_outputs = seg_outputs[::-1]
-        return seg_outputs[0] if not self.deep_supervision else seg_outputs
+        use_ds = getattr(self.decoder, "deep_supervision", False)
+        if use_ds:
+            return seg_outputs
+        return seg_outputs[0]
 
     def compute_conv_feature_map_size(self, input_size: Tuple[int, ...]) -> int:
         """
-        Estimate memory footprint of feature maps.
+        Estimate memory footprint (#elements) of feature maps.
         """
         sizes = list(input_size)
         total = 0
         # encoder
         for s, pool in enumerate(self.pooling):
-            # use numpy.prod instead of torch.tensor(...) to avoid the warning
             total += self.features_per_stage[s] * int(np.prod(sizes))
             if not isinstance(pool, nn.Identity):
                 for i in range(len(sizes)):
@@ -194,6 +211,5 @@ class SwinUNet(nn.Module):
         for d in range(len(self.upconvs)):
             for i in range(len(sizes)):
                 sizes[i] *= self.strides[-(d + 1)]
-            # count both feature maps and segmentation maps
             total += (self.features_per_stage[-(d + 2)] + self.num_classes) * int(np.prod(sizes))
         return int(total)

@@ -40,23 +40,35 @@ def window_reverse(windows: torch.Tensor, window_size: int, spatial_shape: Tuple
     """
     dim = len(spatial_shape)
     ws = window_size
+
     if dim == 2:
         H, W = spatial_shape
-        B = int(windows.shape[0] // (H * W / ws / ws))
+        # compute batch size by integer arithmetic
+        num_windows_per_image = (H // ws) * (W // ws)
+        B = windows.shape[0] // num_windows_per_image
+
         x = windows.view(B, H // ws, W // ws, ws, ws, -1)
         x = x.permute(0, 5, 1, 3, 2, 4).contiguous().view(B, -1, H, W)
         return x
+
     elif dim == 3:
         D, H, W = spatial_shape
-        B = int(windows.shape[0] // (D * H * W / ws**3))
-        x = windows.view(B,
-                         D // ws, H // ws, W // ws,
-                         ws, ws, ws,
-                         -1)
+        # compute batch size by integer arithmetic
+        num_windows_per_image = (D // ws) * (H // ws) * (W // ws)
+        B = windows.shape[0] // num_windows_per_image
+
+        x = windows.view(
+            B,
+            D // ws, H // ws, W // ws,
+            ws,      ws,      ws,
+            -1
+        )
         x = x.permute(0, 7, 1, 4, 2, 5, 3, 6).contiguous().view(B, -1, D, H, W)
         return x
+
     else:
         raise ValueError(f"Unsupported spatial dims: {dim}")
+
 
 
 class Mlp(nn.Module):
@@ -154,14 +166,25 @@ class SwinTransformerBlock(nn.Module):
         x_flat = self.norm1(x_flat)
         x = x_flat.transpose(1, 2).view(x.shape)
 
-        # padding
-        pads = []
-        for s, size in zip(reversed(shape), [self.window_size]*dims):
-            pad = (size - s % size) % size
-            pads.extend([0, pad])
-        # F.pad expects reverse order: last two dims first
-        x = F.pad(x, pads)
+        # padding so H, W (and D) are multiples of window_size
+        if dims == 2:
+            _, _, H, W = x.shape
+            pad_h = (self.window_size - H % self.window_size) % self.window_size
+            pad_w = (self.window_size - W % self.window_size) % self.window_size
+            # pad = (left, right, top, bottom)
+            x = F.pad(x, (0, pad_w, 0, pad_h))
+        elif dims == 3:
+            _, _, D, H, W = x.shape
+            pad_d = (self.window_size - D % self.window_size) % self.window_size
+            pad_h = (self.window_size - H % self.window_size) % self.window_size
+            pad_w = (self.window_size - W % self.window_size) % self.window_size
+            # pad = (left, right, top, bottom, front, back)
+            x = F.pad(x, (0, pad_w, 0, pad_h, 0, pad_d))
+        else:
+            raise ValueError(f"Unsupported input dims: {dims}")
+
         padded_shape = x.shape[2:]
+
 
         # shift
         if self.shift_size > 0:

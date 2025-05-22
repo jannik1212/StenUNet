@@ -5,7 +5,8 @@ from nnunetv2.utilities.network_initialization import InitWeights_He
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
 from nnunetv2.dynamic_network_architectures.architectures.swin_unet import SwinUNet
-from nnunetv2.dynamic_network_architectures.architectures.vsnet import VSNet
+from dynamic_network_architectures.architectures.unetr import UNETR
+from dynamic_network_architectures.architectures.vsnet import VSNet
 
 from torch import nn
 
@@ -34,6 +35,7 @@ def get_network_from_plans(plans_manager: PlansManager,
         'ResidualEncoderUNet': ResidualEncoderUNet,
         'AttentionUNet': AttentionUNet,
         'SwinUNet': SwinUNet,
+        'UNETR': UNETR,
         'VSNet': VSNet
     }
     kwargs = {
@@ -69,15 +71,22 @@ def get_network_from_plans(plans_manager: PlansManager,
             'nonlin': nn.LeakyReLU,
             'nonlin_kwargs': {'inplace': True},
        },
+        'UNETR': {
+            'conv_bias': True,
+            'norm_op': get_matching_instancenorm(conv_op),
+            'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
+            'dropout_op': None, 'dropout_op_kwargs': None,
+            'nonlin': nn.LeakyReLU, 'nonlin_kwargs': {'inplace': True},
+            # adding defaults fpr UNETR? could work
+        },
         'VSNet': {
             'conv_bias': True,
             'norm_op': get_matching_instancenorm(conv_op),
             'norm_op_kwargs': {'eps': 1e-5, 'affine': True},
-            'dropout_op': None,
-            'dropout_op_kwargs': None,
-            'nonlin': nn.LeakyReLU,
-            'nonlin_kwargs': {'inplace': True},
+            'dropout_op': None, 'dropout_op_kwargs': None,
+            'nonlin': nn.LeakyReLU, 'nonlin_kwargs': {'inplace': True},
         }
+        
     }
 
     assert segmentation_network_class_name in mapping.keys(), 'The network architecture specified by the plans file ' \
