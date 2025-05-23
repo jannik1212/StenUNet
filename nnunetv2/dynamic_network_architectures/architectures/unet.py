@@ -12,9 +12,6 @@ from nnunetv2.dynamic_network_architectures.building_blocks.unet_decoder import 
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim
 
 
-
-
-
 class PlainConvUNet(nn.Module):
     def __init__(self,
                  input_channels: int,
