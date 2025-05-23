@@ -262,25 +262,27 @@ class VSNetCore(nn.Module):
                 )
             )
 
-
-        self.seg_head = Outlayer(
-            in_channels = feats[0],    # full_res has feats[0] channels
-            out_channels= num_classes,
-            activation  = 'Softmax'
+        # —> raw logits (no Softmax baked in)
+        self.seg_head = nn.Conv3d(
+            in_channels=feats[2],    # features at highest resolution
+            out_channels=num_classes,
+            kernel_size=1,
+            bias=True
         )
         if deep_supervision:
-            # mid2 has feats[0] channels
-            self.ds2 = Outlayer(
-                in_channels = feats[0],
-                out_channels= num_classes,
-                activation  = 'Softmax'
+            self.ds2 = nn.Conv3d(
+                in_channels=feats[1],  # features at mid resolution
+                out_channels=num_classes,
+                kernel_size=1,
+                bias=True
             )
-            # mid1 has feats[1] channels
-            self.ds3 = Outlayer(
-                in_channels = feats[1],
-                out_channels= num_classes,
-                activation  = 'Softmax'
+            self.ds3 = nn.Conv3d(
+                in_channels=feats[0],  # features at lower resolution
+                out_channels=num_classes,
+                kernel_size=1,
+                bias=True
             )
+
 
         # dummy decoder attr for nnU-Net compatibility
         self.decoder = nn.Module()
@@ -288,23 +290,30 @@ class VSNetCore(nn.Module):
     
     def forward(self, x: torch.Tensor):
         # ENCODER + gating
+        print(f"[VSNet] input       = {tuple(x.shape)}")
         x1 = self.encoders[0](x)
+        print(f"[VSNet] enc1 out    = {tuple(x1.shape)}")
         x2 = self.encoders[1](x1)
         x2p = self.pooling[1](x2)
         x1g = self.gates[0](x1, x2p)
+        print(f"[VSNet] gate1 out   = {tuple(x1g.shape)}")
 
         x3 = self.encoders[2](x2p)
         x3p = self.pooling[2](x3)
         x2g = self.gates[1](x2p, x3p)
+        print(f"[VSNet] gate2 out   = {tuple(x2g.shape)}")
 
         x4 = self.encoders[3](x3p)
         x4p = self.pooling[3](x4)
         x3g = self.gates[2](x3p, x4p)
+        print(f"[VSNet] gate3 out   = {tuple(x3g.shape)}")
 
         # BOTTLENECK
+        print(f"[VSNet] bottleneck in = {tuple(x4p.shape)}")
         x5 = self.swin(x4p)
         x5 = self.CSA(x5)
         x5 = self.SSA(x5)
+        print(f"[VSNet] bottleneck out= {tuple(x5.shape)}")
 
         # DECODER
         skips = [x4, x3g, x2g, x1g]
@@ -314,6 +323,8 @@ class VSNetCore(nn.Module):
             out = self.dt[i](out)
             out = self.upconvs[i](out)
             sk  = skips[i]
+            print(f"[VSNet] upconv[{i}]   = {tuple(out.shape)}, skip = {tuple(skips[i].shape)}")
+            
             if out.shape[2:] != sk.shape[2:]:
                 out = F.interpolate(
                     out,
@@ -321,30 +332,29 @@ class VSNetCore(nn.Module):
                     mode='trilinear',
                     align_corners=False
                 )
+                print(f"[VSNet] upconv[{i}] interp→ {tuple(out.shape)}")
             out = torch.cat([sk, out], dim=1)
             out = self.decoders[i](out)
+            print(f"[VSNet] decoder[{i}]  = {tuple(out.shape)}")
             ups.append(out)
 
         # ups[0]=1/8, ups[1]=1/4, ups[2]=1/2, ups[3]=full
         low_res, small_res, mid_res, full_res = ups
-
-        # Debug prints
-        print(f"[VSNet] low_res shape = {low_res.shape}")
-        print(f"[VSNet] small_res shape = {small_res.shape}")
-        print(f"[VSNet] mid_res shape = {mid_res.shape}")
-        print(f"[VSNet] full_res shape = {full_res.shape}")
+        print(f"[VSNet] low_res    = {tuple(low_res.shape)}")
+        print(f"[VSNet] small_res  = {tuple(small_res.shape)}")
+        print(f"[VSNet] mid_res    = {tuple(mid_res.shape)}")
+        print(f"[VSNet] full_res   = {tuple(full_res.shape)}")
 
         # main head at full resolution
         main = self.seg_head(full_res)
-        print(f"[VSNet] main    shape = {main.shape}")
-
+        print(f"[VSNet] seg_head→   = {tuple(main.shape)}")
         if self.decoder.deep_supervision:
             # ds2 on mid_res (48³), ds3 on small_res (24³)
-            return [
-                main,
-                self.ds2(mid_res),
-                self.ds3(small_res)
-            ]
+            side2 = self.ds2(mid_res)
+            side3 = self.ds3(small_res)
+            print(f"[VSNet] ds2(mid)   = {tuple(side2.shape)}")
+            print(f"[VSNet] ds3(small) = {tuple(side3.shape)}")
+            return [main, side2, side3]
 
         return main
 
