@@ -88,9 +88,6 @@ class WindowAttention(nn.Module):
 
 
 class PatchMerging(nn.Module):
-    """
-    Patch merging layer for downsampling, linear projection.
-    """
     def __init__(
         self,
         dim: int,
@@ -98,29 +95,34 @@ class PatchMerging(nn.Module):
         spatial_dims: int = 3
     ):
         super().__init__()
+        # factor = 2**spatial_dims (for 3D this is 8)
         factor = 2 ** spatial_dims
         self.reduction = nn.Linear(factor * dim, 2 * dim, bias=False)
         self.norm = norm_layer(factor * dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        dims = x.ndim - 2
-        reorder = list(range(x.ndim))
-        reorder = reorder[0:1] + reorder[2:] + reorder[1:2]
-        x = x.permute(*reorder)
-        spatial = x.shape[1:-1]
-        pads = []
-        for s in spatial[::-1]: pads.extend([0, s % 2])
-        if any(s % 2 for s in spatial): x = F.pad(x, pads)
-        splits = [
-            x[tuple(slice(None) if i != d else slice(d%2,None,2) for i in range(x.ndim))]
-            for d in range(dims)
-        ]
-        x = torch.cat(splits, dim=-1)
+        # x: (B, C, D, H, W)
+        B, C, D, H, W = x.shape
+        # first pad if any dimension is odd
+        pd = (D % 2, H % 2, W % 2)
+        if any(pd):
+            pad = (0, pd[2], 0, pd[1], 0, pd[0])  # (W-l, W-r, H-l, H-r, D-l, D-r)
+            x = F.pad(x, pad)
+            B, C, D, H, W = x.shape
+
+        # reshape into 2×2×2 blocks
+        x = x.view(B, C, D//2, 2, H//2, 2, W//2, 2)
+        # bring the block‐offset dims next to channel dim
+        x = x.permute(0, 2, 4, 6, 3, 5, 7, 1).contiguous()
+        # collapse the block dims into channel
+        x = x.view(B, D//2, H//2, W//2, 8*C)
+
+        # norm & linear reduce: (B, D', H', W', 8C) → (B, D', H', W', 2C)
         x = self.norm(x)
         x = self.reduction(x)
-        new_sp = [s//2 for s in spatial]
-        new_C = x.shape[-1]
-        x = x.view(x.shape[0], *new_sp, new_C).permute(*([0, -1] + list(range(1,1+dims))))
+
+        # back to NCDHW
+        x = x.permute(0, 4, 1, 2, 3).contiguous()
         return x
 
 
@@ -164,19 +166,54 @@ class SwinTransformerBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, C, *sp = x.shape
-        x_in = x
-        x = self.norm1(x.flatten(2).transpose(1,2)).transpose(1,2).view(B,C,*sp)
+        B, C, *sp = x.shape     # original spatial dims
+        x_in = x                # save un-padded input for the residual
+
+        # 1) normalize and MLP prep on the _unpadded_ x_in, but we'll split this into
+        #    two norms so both branches see a norm before their non-linearity.
+        x = self.norm1(x.flatten(2).transpose(1, 2))
+        x = x.transpose(1, 2).view(B, C, *sp)
+
+        # 2) pad each spatial dim so it's divisible by the window size
+        ws, _ = get_window_size(sp, self.window_size, None)
+        pads = []
+        for dim, w in zip(sp[::-1], ws[::-1]):
+            rem = dim % w
+            pads += [0, (w - rem) % w]
+        x = F.pad(x, pads)
+        sp = list(x.shape[2:])  # updated, padded spatial dims
+
+        # 3) now do shifted windows attention exactly as before
         ws, ss = get_window_size(sp, self.window_size, self.shift_size)
-        shifted = torch.roll(x, shifts=[-s for s in ss], dims=list(range(2,2+len(sp)))) if any(ss) else x
+        shifted = torch.roll(x, shifts=[-s for s in ss], dims=list(range(2, 2+len(sp)))) \
+                  if any(ss) else x
         x_win = window_partition(shifted, ws)
-        mask = compute_mask(sp, ws, ss, x.device) if any(ss) else None
-        attn = self.attn(x_win, mask)
-        x_ = window_reverse(attn, ws, sp)
-        x_ = torch.roll(x_, shifts=ss, dims=list(range(2,2+len(sp)))) if any(ss) else x_
+        mask  = compute_mask(sp, ws, ss, x.device) if any(ss) else None
+        attn  = self.attn(x_win, mask)
+        x_    = window_reverse(attn, ws, sp)
+        x_    = torch.roll(x_, shifts=ss, dims=list(range(2, 2+len(sp)))) \
+                  if any(ss) else x_
+
+        # 4) remove the padding so x_ is back to original [B,C,D,H,W]
+        D0, H0, W0 = x_in.shape[2:]
+        x_ = x_[..., :D0, :H0, :W0]
+
+        # 5) residual + MLP residual
         x = x_in + self.drop_path(x_)
-        x = x + self.drop_path(self.mlp(self.norm2(x).flatten(2).transpose(1,2)).transpose(1,2).view(B,C,*sp))
+        
+        # second norm+MLP on the UNPADDED spatial size:
+        # x currently has shape [B,C,D0,H0,W0] (unpadded)
+        D0, H0, W0 = x_in.shape[2:]             # original sizes
+        # flatten spatial dims → (B, N0, C), N0 = D0*H0*W0
+        y = self.norm2(x.flatten(2).transpose(1,2))
+        # MLP on (B, N0, C)
+        y = self.mlp(y)
+        # reshape back to [B,C,D0,H0,W0]
+        y = y.transpose(1,2).view(B, C, D0, H0, W0)
+        x = x + self.drop_path(y)
+
         return x
+
 
 
 class SwinLayer(nn.Module):

@@ -856,7 +856,7 @@ class nnUNetTrainer(object):
         self.print_to_log_file('')
         self.print_to_log_file(f'Epoch {self.current_epoch}')
         lrs = [g['lr'] for g in self.optimizer.param_groups]
-        self.print_to_log_file(f"Current LRs → encoder: {lrs[0]:.5f}, decoder: {lrs[1]:.5f}")
+        self.print_to_log_file(f"Current LRs → {lrs[0]:.5f}")
 
         # lrs are the same for all workers so we don't need to gather them in case of DDP training
         self.logger.log('lrs', self.optimizer.param_groups[0]['lr'], self.current_epoch)

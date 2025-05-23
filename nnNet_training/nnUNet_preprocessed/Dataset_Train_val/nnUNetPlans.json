@@ -45,23 +45,15 @@
             "use_mask_for_norm": [
                 false
             ],
-            "UNet_class_name": "UNETR",
+            "UNet_class_name": "VSNet",
             "UNet_base_num_features": 32,
             "n_conv_per_stage_encoder": [
-                2,
-                2,
-                2,
-                2,
                 2,
                 2,
                 2,
                 2
             ],
             "n_conv_per_stage_decoder": [
-                2,
-                2,
-                2,
-                2,
                 2,
                 2,
                 2
@@ -86,41 +78,9 @@
                 [
                     2,
                     2
-                ],
-                [
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2
                 ]
             ],
             "conv_kernel_sizes": [
-                [
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3
-                ],
                 [
                     3,
                     3
@@ -161,6 +121,117 @@
                 "force_separate_z": null
             },
             "batch_dice": true
+        },
+        "3d_fullres": {
+            "data_identifier": "nnUNetPlans_3d_fullres",
+            "preprocessor_name": "DefaultPreprocessor",
+            "batch_size": 1,
+            "patch_size": [
+                96,
+                96,
+                96
+            ],
+            "median_image_size_in_voxels": [
+                224.0,
+                512.0,
+                512.0
+            ],
+            "spacing": [
+                0.625,
+                0.3964845058,
+                0.3964845058
+            ],
+            "normalization_schemes": [
+                "ZScoreNormalization"
+            ],
+            "use_mask_for_norm": [
+                false
+            ],
+            "UNet_class_name": "VSNet",
+            "UNet_base_num_features": 32,
+            "n_conv_per_stage_encoder": [
+                2,
+                2,
+                2,
+                2
+            ],
+            "n_conv_per_stage_decoder": [
+                2,
+                2,
+                2
+            ],
+            "num_pool_per_axis": [
+                5,
+                6,
+                6
+            ],
+            "pool_op_kernel_sizes": [
+                [
+                    1,
+                    1,
+                    1
+                ],
+                [
+                    2,
+                    2,
+                    2
+                ],
+                [
+                    2,
+                    2,
+                    2
+                ],
+                [
+                    2,
+                    2,
+                    2
+                ]
+            ],
+            "conv_kernel_sizes": [
+                [
+                    3,
+                    3,
+                    3
+                ],
+                [
+                    3,
+                    3,
+                    3
+                ],
+                [
+                    3,
+                    3,
+                    3
+                ],
+                [
+                    3,
+                    3,
+                    3
+                ]
+            ],
+            "unet_max_num_features": 320,
+            "resampling_fn_data": "resample_data_or_seg_to_shape",
+            "resampling_fn_seg": "resample_data_or_seg_to_shape",
+            "resampling_fn_data_kwargs": {
+                "is_seg": false,
+                "order": 3,
+                "order_z": 0,
+                "force_separate_z": null
+            },
+            "resampling_fn_seg_kwargs": {
+                "is_seg": true,
+                "order": 1,
+                "order_z": 0,
+                "force_separate_z": null
+            },
+            "resampling_fn_probabilities": "resample_data_or_seg_to_shape",
+            "resampling_fn_probabilities_kwargs": {
+                "is_seg": false,
+                "order": 1,
+                "order_z": 0,
+                "force_separate_z": null
+            },
+            "batch_dice": false
         },
         "3d_lowres": {
             "data_identifier": "nnUNetPlans_3d_lowres",
@@ -297,141 +368,6 @@
             },
             "batch_dice": false,
             "next_stage": "3d_cascade_fullres"
-        },
-        "3d_fullres": {
-            "data_identifier": "nnUNetPlans_3d_fullres",
-            "preprocessor_name": "DefaultPreprocessor",
-            "batch_size": 2,
-            "patch_size": [
-                80,
-                192,
-                160
-            ],
-            "median_image_size_in_voxels": [
-                224.0,
-                512.0,
-                512.0
-            ],
-            "spacing": [
-                0.625,
-                0.3964845058,
-                0.3964845058
-            ],
-            "normalization_schemes": [
-                "ZScoreNormalization"
-            ],
-            "use_mask_for_norm": [
-                false
-            ],
-            "UNet_class_name": "UNETR",
-            "UNet_base_num_features": 32,
-            "n_conv_per_stage_encoder": [
-                2,
-                2,
-                2,
-                2,
-                2,
-                2
-            ],
-            "n_conv_per_stage_decoder": [
-                2,
-                2,
-                2,
-                2,
-                2
-            ],
-            "num_pool_per_axis": [
-                4,
-                5,
-                5
-            ],
-            "pool_op_kernel_sizes": [
-                [
-                    1,
-                    1,
-                    1
-                ],
-                [
-                    2,
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2,
-                    2
-                ],
-                [
-                    2,
-                    2,
-                    2
-                ],
-                [
-                    1,
-                    2,
-                    2
-                ]
-            ],
-            "conv_kernel_sizes": [
-                [
-                    3,
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3,
-                    3
-                ],
-                [
-                    3,
-                    3,
-                    3
-                ]
-            ],
-            "unet_max_num_features": 320,
-            "resampling_fn_data": "resample_data_or_seg_to_shape",
-            "resampling_fn_seg": "resample_data_or_seg_to_shape",
-            "resampling_fn_data_kwargs": {
-                "is_seg": false,
-                "order": 3,
-                "order_z": 0,
-                "force_separate_z": null
-            },
-            "resampling_fn_seg_kwargs": {
-                "is_seg": true,
-                "order": 1,
-                "order_z": 0,
-                "force_separate_z": null
-            },
-            "resampling_fn_probabilities": "resample_data_or_seg_to_shape",
-            "resampling_fn_probabilities_kwargs": {
-                "is_seg": false,
-                "order": 1,
-                "order_z": 0,
-                "force_separate_z": null
-            },
-            "batch_dice": true
         },
         "3d_cascade_fullres": {
             "inherits_from": "3d_fullres",

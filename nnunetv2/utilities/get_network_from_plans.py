@@ -5,8 +5,8 @@ from nnunetv2.utilities.network_initialization import InitWeights_He
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 from nnunetv2.dynamic_network_architectures.architectures.unet_attention import AttentionUNet
 from nnunetv2.dynamic_network_architectures.architectures.swin_unet import SwinUNet
-from dynamic_network_architectures.architectures.unetr import UNETR
-from dynamic_network_architectures.architectures.vsnet import VSNet
+from nnunetv2.dynamic_network_architectures.architectures.unetr import UNETR
+from nnunetv2.dynamic_network_architectures.architectures.vsnet import VSNet
 
 from torch import nn
 

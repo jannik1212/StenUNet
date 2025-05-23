@@ -50,7 +50,7 @@ class ExperimentPlanner(object):
         self.anisotropy_threshold = ANISO_THRESHOLD
 
         self.UNet_base_num_features = 32
-        self.UNet_class = UNETR # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet, UNETR
+        self.UNet_class = VSNet # ResidualEncoderUNet, AttentionUNet, PlainConvUNet, SwinUNet, VSNet, UNETR
         # the following two numbers are really arbitrary and were set to reproduce nnU-Net v1's configurations as
         # much as possible
         self.UNet_reference_val_3d = 560000000  # 455600128  550000000
