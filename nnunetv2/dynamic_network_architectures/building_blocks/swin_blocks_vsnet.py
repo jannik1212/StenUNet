@@ -154,7 +154,7 @@ class SwinTransformerBlock(nn.Module):
         self.attn = WindowAttention(dim, num_heads, self.window_size, qkv_bias, attn_drop, drop)
         self.drop_path = nn.Identity()
         if drop_path > 0:
-            from dynamic_network_architectures.building_blocks.vsnet_utils import DropPath
+            from dynamic_network_architectures.building_blocks.regularization import DropPath
             self.drop_path = DropPath(drop_path)
         self.norm2 = norm_layer(dim)
         hidden_dim = int(dim * mlp_ratio)
