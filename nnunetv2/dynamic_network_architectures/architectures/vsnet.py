@@ -262,22 +262,25 @@ class VSNetCore(nn.Module):
                 )
             )
 
-        # —> raw logits (no Softmax baked in)
+        # → raw logits (no Softmax baked in)
+        # full_res = ups[3] has feats[0] channels
         self.seg_head = nn.Conv3d(
-            in_channels=feats[2],    # features at highest resolution
+            in_channels=feats[0],
             out_channels=num_classes,
             kernel_size=1,
             bias=True
         )
         if deep_supervision:
+            # mid_res = ups[2] also has feats[0] channels
             self.ds2 = nn.Conv3d(
-                in_channels=feats[1],  # features at mid resolution
+                in_channels=feats[0],
                 out_channels=num_classes,
                 kernel_size=1,
                 bias=True
             )
+            # small_res = ups[1] has feats[1] channels
             self.ds3 = nn.Conv3d(
-                in_channels=feats[0],  # features at lower resolution
+                in_channels=feats[1],
                 out_channels=num_classes,
                 kernel_size=1,
                 bias=True
@@ -289,74 +292,105 @@ class VSNetCore(nn.Module):
         self.decoder.deep_supervision = deep_supervision
     
     def forward(self, x: torch.Tensor):
-        # ENCODER + gating
-        print(f"[VSNet] input       = {tuple(x.shape)}")
-        x1 = self.encoders[0](x)
-        print(f"[VSNet] enc1 out    = {tuple(x1.shape)}")
-        x2 = self.encoders[1](x1)
-        x2p = self.pooling[1](x2)
-        x1g = self.gates[0](x1, x2p)
-        print(f"[VSNet] gate1 out   = {tuple(x1g.shape)}")
+      # input
+      print(f"[NAN TRACE] input        = {tuple(x.shape)}, "
+            f"min/max/mean = {x.min().item():.3e}/{x.max().item():.3e}/{x.mean().item():.3e}")
 
-        x3 = self.encoders[2](x2p)
-        x3p = self.pooling[2](x3)
-        x2g = self.gates[1](x2p, x3p)
-        print(f"[VSNet] gate2 out   = {tuple(x2g.shape)}")
+      # ENCODER + gating
+      x1 = self.encoders[0](x)
+      print(f"[NAN TRACE] enc1 out     = {tuple(x1.shape)}, "
+            f"min/max/mean = {x1.min().item():.3e}/{x1.max().item():.3e}/{x1.mean().item():.3e}")
 
-        x4 = self.encoders[3](x3p)
-        x4p = self.pooling[3](x4)
-        x3g = self.gates[2](x3p, x4p)
-        print(f"[VSNet] gate3 out   = {tuple(x3g.shape)}")
+      x2 = self.encoders[1](x1)
+      x2p = self.pooling[1](x2)
+      x1g = self.gates[0](x1, x2p)
+      print(f"[NAN TRACE] gate1 out    = {tuple(x1g.shape)}, "
+            f"min/max/mean = {x1g.min().item():.3e}/{x1g.max().item():.3e}/{x1g.mean().item():.3e}")
 
-        # BOTTLENECK
-        print(f"[VSNet] bottleneck in = {tuple(x4p.shape)}")
-        x5 = self.swin(x4p)
-        x5 = self.CSA(x5)
-        x5 = self.SSA(x5)
-        print(f"[VSNet] bottleneck out= {tuple(x5.shape)}")
+      x3 = self.encoders[2](x2p)
+      x3p = self.pooling[2](x3)
+      x2g = self.gates[1](x2p, x3p)
+      print(f"[NAN TRACE] gate2 out    = {tuple(x2g.shape)}, "
+            f"min/max/mean = {x2g.min().item():.3e}/{x2g.max().item():.3e}/{x2g.mean().item():.3e}")
 
-        # DECODER
-        skips = [x4, x3g, x2g, x1g]
-        ups   = []
-        out   = x5
-        for i in range(4):
-            out = self.dt[i](out)
-            out = self.upconvs[i](out)
-            sk  = skips[i]
-            print(f"[VSNet] upconv[{i}]   = {tuple(out.shape)}, skip = {tuple(skips[i].shape)}")
-            
-            if out.shape[2:] != sk.shape[2:]:
-                out = F.interpolate(
-                    out,
-                    size=sk.shape[2:],
-                    mode='trilinear',
-                    align_corners=False
-                )
-                print(f"[VSNet] upconv[{i}] interp→ {tuple(out.shape)}")
-            out = torch.cat([sk, out], dim=1)
-            out = self.decoders[i](out)
-            print(f"[VSNet] decoder[{i}]  = {tuple(out.shape)}")
-            ups.append(out)
+      x4 = self.encoders[3](x3p)
+      x4p = self.pooling[3](x4)
+      x3g = self.gates[2](x3p, x4p)
+      print(f"[NAN TRACE] gate3 out    = {tuple(x3g.shape)}, "
+            f"min/max/mean = {x3g.min().item():.3e}/{x3g.max().item():.3e}/{x3g.mean().item():.3e}")
 
-        # ups[0]=1/8, ups[1]=1/4, ups[2]=1/2, ups[3]=full
-        low_res, small_res, mid_res, full_res = ups
-        print(f"[VSNet] low_res    = {tuple(low_res.shape)}")
-        print(f"[VSNet] small_res  = {tuple(small_res.shape)}")
-        print(f"[VSNet] mid_res    = {tuple(mid_res.shape)}")
-        print(f"[VSNet] full_res   = {tuple(full_res.shape)}")
+      # BOTTLENECK
+      print(f"[NAN TRACE] bottleneck in = {tuple(x4p.shape)}, "
+            f"min/max/mean = {x4p.min().item():.3e}/{x4p.max().item():.3e}/{x4p.mean().item():.3e}")
 
-        # main head at full resolution
-        main = self.seg_head(full_res)
-        print(f"[VSNet] seg_head→   = {tuple(main.shape)}")
-        if self.decoder.deep_supervision:
-            # ds2 on mid_res (48³), ds3 on small_res (24³)
-            side2 = self.ds2(mid_res)
-            side3 = self.ds3(small_res)
-            print(f"[VSNet] ds2(mid)   = {tuple(side2.shape)}")
-            print(f"[VSNet] ds3(small) = {tuple(side3.shape)}")
-            return [main, side2, side3]
+      x5 = self.swin(x4p)
+      print(f"[NAN TRACE] after Swin    = {tuple(x5.shape)}, "
+            f"min/max/mean = {x5.min().item():.3e}/{x5.max().item():.3e}/{x5.mean().item():.3e}")
 
-        return main
+      x5 = self.CSA(x5)
+      print(f"[NAN TRACE] after CSA     = {tuple(x5.shape)}, "
+            f"min/max/mean = {x5.min().item():.3e}/{x5.max().item():.3e}/{x5.mean().item():.3e}")
+
+      x5 = self.SSA(x5)
+      print(f"[NAN TRACE] after SSA     = {tuple(x5.shape)}, "
+            f"min/max/mean = {x5.min().item():.3e}/{x5.max().item():.3e}/{x5.mean().item():.3e}")
+
+      # DECODER
+      skips = [x4, x3g, x2g, x1g]
+      ups   = []
+      out   = x5
+      for i in range(4):
+          out = self.dt[i](out)
+          print(f"[NAN TRACE] dt[{i}] out    = {tuple(out.shape)}, "
+                f"min/max/mean = {out.min().item():.3e}/{out.max().item():.3e}/{out.mean().item():.3e}")
+
+          out = self.upconvs[i](out)
+          print(f"[NAN TRACE] upconv[{i}] out= {tuple(out.shape)}, "
+                f"min/max/mean = {out.min().item():.3e}/{out.max().item():.3e}/{out.mean().item():.3e}")
+
+          sk  = skips[i]
+          if out.shape[2:] != sk.shape[2:]:
+              out = F.interpolate(
+                  out,
+                  size=sk.shape[2:],
+                  mode='trilinear',
+                  align_corners=False
+              )
+              print(f"[NAN TRACE] interp[{i}]   = {tuple(out.shape)}, "
+                    f"min/max/mean = {out.min().item():.3e}/{out.max().item():.3e}/{out.mean().item():.3e}")
+
+          out = torch.cat([sk, out], dim=1)
+          print(f"[NAN TRACE] concat[{i}]   = {tuple(out.shape)}, "
+                f"min/max/mean = {out.min().item():.3e}/{out.max().item():.3e}/{out.mean().item():.3e}")
+
+          out = self.decoders[i](out)
+          print(f"[NAN TRACE] decoder[{i}] out= {tuple(out.shape)}, "
+                f"min/max/mean = {out.min().item():.3e}/{out.max().item():.3e}/{out.mean().item():.3e}")
+
+          ups.append(out)
+
+      # unpack resolutions
+      low_res, small_res, mid_res, full_res = ups
+      print(f"[NAN TRACE] full_res      = {tuple(full_res.shape)}")
+
+      # heads
+      main = self.seg_head(full_res)
+      print(f"[NAN TRACE] seg_head out  = {tuple(main.shape)}, "
+            f"min/max/mean = {main.min().item():.3e}/{main.max().item():.3e}/{main.mean().item():.3e}")
+
+      if self.decoder.deep_supervision:
+          ds2 = self.ds2(mid_res)
+          print(f"[NAN TRACE] ds2 out       = {tuple(ds2.shape)}, "
+                f"min/max/mean = {ds2.min().item():.3e}/{ds2.max().item():.3e}/{ds2.mean().item():.3e}")
+
+          ds3 = self.ds3(small_res)
+          print(f"[NAN TRACE] ds3 out       = {tuple(ds3.shape)}, "
+                f"min/max/mean = {ds3.min().item():.3e}/{ds3.max().item():.3e}/{ds3.mean().item():.3e}")
+
+          return [main, ds2, ds3]
+
+      return main
+
 
     def compute_conv_feature_map_size(self, input_size: Tuple[int, ...]) -> int:
         # identical to before, for VRAM planning
