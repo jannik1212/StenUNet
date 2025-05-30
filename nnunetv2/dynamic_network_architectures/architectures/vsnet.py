@@ -11,7 +11,7 @@ from typing import Union, List, Tuple, Type
 from torch.nn.modules.conv import _ConvNd
 
 from nnunetv2.dynamic_network_architectures.building_blocks.attention_blocks_vsnet import CSA, SSA
-from nnunetv2.dynamic_network_architectures.building_blocks.conv_blocks_vsnet import DepTran, Gate, Outlayer
+from nnunetv2.dynamic_network_architectures.building_blocks.conv_blocks_vsnet import DepTran, Gate
 from nnunetv2.dynamic_network_architectures.building_blocks.swin_blocks_vsnet import SwinLayer, PatchMerging
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import (
     convert_conv_op_to_dim,

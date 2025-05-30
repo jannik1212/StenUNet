@@ -25,7 +25,6 @@ class AttentionBlock(nn.Module):
         )
         self.psi = nn.Sequential(
             conv_op(F_int, 1, kernel_size=1, bias=True),
-            norm_op(1),
             nn.Sigmoid()
         )
         self.relu = nn.ReLU(inplace=True)

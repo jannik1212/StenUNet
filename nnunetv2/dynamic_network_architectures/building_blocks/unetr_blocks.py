@@ -1,23 +1,9 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn.modules.conv import _ConvNd
 from typing import Tuple, Union, List, Type
 
 from nnunetv2.dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim
-
-
-def _norm(channels: int,
-          conv_op: Type[_ConvNd],
-          norm_op: Type[nn.Module],
-          norm_kwargs: dict):
-    """
-    Choose normalization: prefer norm_op if provided, otherwise instance norm based on conv_op dim.
-    """
-    if norm_op is not None:
-        return norm_op(channels, **(norm_kwargs or {}))
-    dim = convert_conv_op_to_dim(conv_op)
-    return nn.InstanceNorm3d(channels) if dim == 3 else nn.InstanceNorm2d(channels)
 
 
 class PatchEmbedND(nn.Module):
@@ -63,7 +49,7 @@ class ViTNDEncoder(nn.Module):
                  num_layers: int = 12,
                  num_heads: int = 8,
                  mlp_ratio: float = 4.0,
-                 dropout: float = 0.0,
+                 dropout: float = 0.0, # affect 
                  attn_dropout: float = 0.0,
                  depths: Tuple[int, ...] = None):
         super().__init__()
@@ -72,6 +58,8 @@ class ViTNDEncoder(nn.Module):
             nhead=num_heads,
             dim_feedforward=int(embed_dim * mlp_ratio),
             dropout=dropout,
+            attention_dropout=attn_dropout,
+            layer_norm_eps=1e-6,
             activation='gelu',
             batch_first=True
         )
@@ -99,7 +87,7 @@ class ConvStackND(nn.Module):
                  conv_bias: bool = False,
                  norm_op: Type[nn.Module] = None,
                  norm_op_kwargs: dict = None,
-                 norm_kwargs: dict = None,
+                 norm_kwargs: dict = None, # not used, kept for compatibility
                  dropout_op: Type[nn.Module] = None,
                  dropout_op_kwargs: dict = None,
                  nonlin: Type[nn.Module] = None,
@@ -116,7 +104,7 @@ class ConvStackND(nn.Module):
                 bias=conv_bias
             ))
             if norm_op:
-                layers.append(norm_op(out_ch, **(norm_kwargs or {})))
+                layers.append(norm_op(out_ch, **(norm_op_kwargs or {})))
             if nonlin:
                 layers.append(nonlin(**(nonlin_kwargs or {})))
             if dropout_op:

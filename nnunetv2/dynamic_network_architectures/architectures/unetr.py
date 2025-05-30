@@ -128,7 +128,7 @@ class UNETR(nn.Module):
         tokens, sp_after = self.patch_embed(x)
         if self.pos_embed is None:
             pe = torch.zeros(1, tokens.size(1), tokens.size(2), device=x.device, dtype=tokens.dtype)
-            self.pos_embed = nn.Parameter(pe)
+            nn.init.trunc_normal_(pe, std=0.02)
         tokens = tokens + self.pos_embed
 
         # encode

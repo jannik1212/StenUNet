@@ -4,6 +4,57 @@ import torch.nn.functional as F
 from torch.nn.modules.conv import _ConvNd
 from typing import Type, Tuple, Union
 
+class RelativePositionBias(nn.Module):
+    """
+    Implements relative position bias for Swin Transformer.
+    Works for both 2D and 3D based on the given window size.
+    """
+    def __init__(self, window_size, num_heads, is_3d=False):
+        super().__init__()
+        self.is_3d = is_3d
+        self.window_size = window_size if isinstance(window_size, (tuple, list)) else (window_size,) * (3 if is_3d else 2)
+        self.num_heads = num_heads
+
+        relative_position_dims = [(2 * s - 1) for s in self.window_size]
+        num_relative_positions = int(torch.prod(torch.tensor(relative_position_dims)))
+
+        # learnable bias table
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros(num_relative_positions, num_heads)
+        )
+        nn.init.trunc_normal_(self.relative_position_bias_table, std=0.02)
+
+        # create a relative position index for each token in the window
+        coords = [torch.arange(s) for s in self.window_size]
+        coords = torch.stack(torch.meshgrid(*coords, indexing="ij"))  # dims x window_volume
+        coords_flatten = coords.flatten(1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # (dims x N x N)
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # (N x N x dims)
+
+        for i in range(len(self.window_size)):
+            relative_coords[:, :, i] += self.window_size[i] - 1
+
+        if self.is_3d:
+            idx = (relative_coords[:, :, 0] * (2 * self.window_size[1] - 1) * (2 * self.window_size[2] - 1) +
+                   relative_coords[:, :, 1] * (2 * self.window_size[2] - 1) +
+                   relative_coords[:, :, 2])
+        else:
+            idx = (relative_coords[:, :, 0] * (2 * self.window_size[1] - 1) +
+                   relative_coords[:, :, 1])
+
+        self.register_buffer("relative_position_index", idx)
+
+    def forward(self):
+        """
+        Returns: bias tensor of shape (num_heads, N, N)
+        """
+        relative_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        relative_bias = relative_bias.view(
+            self.relative_position_index.shape[0],
+            self.relative_position_index.shape[1],
+            -1  # num_heads
+        )  # shape (N, N, num_heads)
+        return relative_bias.permute(2, 0, 1)  # (num_heads, N, N)
 
 def window_partition(x: torch.Tensor, window_size: int) -> torch.Tensor:
     """
@@ -94,21 +145,20 @@ class Mlp(nn.Module):
 
 
 class WindowAttention(nn.Module):
-    """
-    Window based multi-head self attention (W-MSA) module.
-    Supports 2D and 3D windows.
-    """
     def __init__(self,
                  dim: int,
                  num_heads: int,
-                 window_size: int,
+                 window_size: Union[int, Tuple[int, ...]],
                  qkv_bias: bool = True,
                  dropout: float = 0.,
-                 attn_dropout: float = 0.):
+                 attn_dropout: float = 0.,
+                 is_3d: bool = False):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
         self.window_size = window_size
+        self.is_3d = is_3d
+
         head_dim = dim // num_heads
         self.scale = head_dim ** -0.5
 
@@ -117,6 +167,12 @@ class WindowAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(dropout)
 
+        self.relative_position_bias = RelativePositionBias(
+            window_size=window_size,
+            num_heads=num_heads,
+            is_3d=is_3d
+        )
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B_, N, C = x.shape
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads)
@@ -124,6 +180,7 @@ class WindowAttention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn + self.relative_position_bias()
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
@@ -131,6 +188,7 @@ class WindowAttention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+
 
 
 class SwinTransformerBlock(nn.Module):
@@ -152,8 +210,15 @@ class SwinTransformerBlock(nn.Module):
         self.shift_size = shift_size
         self.num_heads = num_heads
         self.norm1 = norm_layer(dim)
-        self.attn = WindowAttention(dim, num_heads, window_size,
-                                    qkv_bias=True, dropout=dropout, attn_dropout=attn_dropout)
+        self.attn = WindowAttention(
+            dim=dim,
+            num_heads=num_heads,
+            window_size=window_size,
+            qkv_bias=True,
+            dropout=dropout,
+            attn_dropout=attn_dropout,
+            is_3d=True if dim == 3 else False
+        )
         self.norm2 = norm_layer(dim)
         self.mlp = Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), dropout=dropout)
 
