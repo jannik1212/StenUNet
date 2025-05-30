@@ -18,7 +18,7 @@ def convert_images_to_grayscale(images_dir):
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    images_dir = os.path.join(base_dir, "../../data/imagesTr")
+    images_dir = "./Frangi_01 4"
     
     print("Converting images to grayscale...")
     convert_images_to_grayscale(images_dir)

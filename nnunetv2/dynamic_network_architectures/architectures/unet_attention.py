@@ -129,7 +129,7 @@ class AttentionUNet(nn.Module):
                 PoolOp = get_matching_pool_op(conv_op, pool_type=pool)
                 self.pooling.append(PoolOp(kernel_size=strides[s], stride=strides[s]))
             else:  # 'conv'
-                self.pooling.append(conv_op(in_ch=features_per_stage[s],
+                self.pooling.append(conv_op(in_channels=features_per_stage[s],
                                             out_channels=features_per_stage[s],
                                             kernel_size=strides[s],
                                             stride=strides[s],
@@ -165,23 +165,28 @@ class AttentionUNet(nn.Module):
                                        kernel_size=strides[d+1],
                                        stride=strides[d+1])
                 )
+            
             # attention gate
             self.attentions.append(
-                AttentionBlock(F_g=features_per_stage[d],
-                               F_l=features_per_stage[d],
-                               F_int=features_per_stage[d]//2,
-                               conv_op=conv_op,
-                               norm_op=norm_op)
+                AttentionBlock(
+                    F_g=features_per_stage[d],   # decoder input x
+                    F_l=features_per_stage[d+1],     # skip connection
+                    F_int=min(features_per_stage[d+1], features_per_stage[d]) // 2,
+                    conv_op=conv_op,
+                    norm_op=norm_op
+                )
             )
             # conv‐stack decoder
+            in_channels = features_per_stage[d+1] + features_per_stage[d]
             self.decoders.append(
-                ConvStack(2*features_per_stage[d],
+                ConvStack(in_channels,
                           features_per_stage[d],
                           n_conv_per_stage_decoder[d],
                           conv_op, norm_op, norm_op_kwargs,
                           dropout_op, dropout_op_kwargs,
                           nonlin, nonlin_kwargs)
             )
+
             # segmentation head
             self.seg_layers.append(conv_op(features_per_stage[d],
                                            num_classes,
@@ -218,7 +223,6 @@ class AttentionUNet(nn.Module):
             x = torch.cat([skip, x], dim=1)
             x = dec(x)
             segs.append(seg(x))
-
         segs = segs[::-1]
         if not self.deep_supervision:
             return segs[0]
