@@ -65,7 +65,7 @@ class SwinUNet(nn.Module):
         self.strides = strides
         self.kernel_sizes = kernel_sizes
         base = self.features_per_stage[0]
-        self.num_heads = [f // base for f in self.features_per_stage]
+        self.num_heads = [max(1, f // 64) for f in self.features_per_stage]
         self.window_size = 7
 
         # Patch embedding

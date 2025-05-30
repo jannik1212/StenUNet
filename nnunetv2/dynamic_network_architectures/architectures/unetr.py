@@ -65,13 +65,13 @@ class UNETR(nn.Module):
             norm_op=norm_op,
             norm_kwargs=norm_op_kwargs
         )
-        self.pos_embed = None  # initialized on first forward
+        self.pos_embed = None 
 
         # --- ViT encoder ---
         total_layers = sum(n_conv_per_stage)
         cum = np.cumsum(n_conv_per_stage)
         depths = tuple([int(c) - 1 for c in cum[:-1]]) if total_layers > 1 else ()
-        num_heads = max(1, base // 64)
+        num_heads = max(1, base // 64) #8 for paper!
         self.vit = ViTNDEncoder(
             embed_dim=base,
             num_layers=total_layers,
@@ -123,6 +123,8 @@ class UNETR(nn.Module):
             )
 
     def forward(self, x: torch.Tensor):
+        dim = x.dim() - 2 
+        
         # embed
         B, C, *sp = x.shape
         tokens, sp_after = self.patch_embed(x)

@@ -150,8 +150,8 @@ class WindowAttention(nn.Module):
                  num_heads: int,
                  window_size: Union[int, Tuple[int, ...]],
                  qkv_bias: bool = True,
-                 dropout: float = 0.,
-                 attn_dropout: float = 0.,
+                 dropout: float = 0.1,
+                 attn_dropout: float = 0.1,
                  is_3d: bool = False):
         super().__init__()
         self.dim = dim
@@ -201,8 +201,8 @@ class SwinTransformerBlock(nn.Module):
                  window_size: int = 7,
                  shift_size: int = 0,
                  mlp_ratio: float = 4.,
-                 dropout: float = 0.,
-                 attn_dropout: float = 0.,
+                 dropout: float = 0.1,
+                 attn_dropout: float = 0.1,
                  norm_layer: Type[nn.Module] = nn.LayerNorm):
         super().__init__()
         self.dim = dim

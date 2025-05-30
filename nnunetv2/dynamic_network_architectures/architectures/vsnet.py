@@ -45,10 +45,10 @@ class VSNet(nn.Module):
         nonlin_kwargs:    dict = None,
         deep_supervision: bool = False,
         # newly exposed VSNet knobs:
-        swin_depth:       int   = None,      # how many Swin blocks (default = last encoder convs)
-        num_heads:        int   = None,      # number of attention heads
-        attn_drop_rate:   float = 0.0,       # dropout inside attention
-        dropout_path_rate:float = 0.0,       # stochastic depth in Swin
+        swin_depth:       int   = 2,      # how many Swin blocks (default = last encoder convs)
+        num_heads:        int   = 8,      # number of attention heads
+        attn_drop_rate:   float = 0.1,       # dropout inside attention
+        dropout_path_rate:float = 0.1,       # stochastic depth in Swin
         use_checkpoint:   bool  = False      # gradient checkpointing in Swin
     ):
         super().__init__()
