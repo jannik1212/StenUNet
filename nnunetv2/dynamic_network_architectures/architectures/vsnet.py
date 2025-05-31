@@ -144,13 +144,10 @@ class VSNetCore(nn.Module):
         kernels    = _to_list(kernel_sizes, 4)
         enc_blocks = _to_list(n_conv_per_stage, 4)
         if isinstance(n_conv_per_stage_decoder, (list, tuple)):
-            # take the 3 entries and append the last one again → length 4
             dec_blocks = list(n_conv_per_stage_decoder) + [n_conv_per_stage_decoder[-1]]
         else:
-            # if it was an int, replicate it 4×
             dec_blocks = [n_conv_per_stage_decoder] * 4
-
-        # finally truncate/pad exactly to 4
+        
         dec_blocks = dec_blocks[:4]
 
         # capture for compute_conv_feature_map_size

@@ -126,12 +126,18 @@ class UNETR(nn.Module):
         dim = x.dim() - 2 
         
         # embed
-        B, C, *sp = x.shape
-        tokens, sp_after = self.patch_embed(x)
-        if self.pos_embed is None:
-            pe = torch.zeros(1, tokens.size(1), tokens.size(2), device=x.device, dtype=tokens.dtype)
-            nn.init.trunc_normal_(pe, std=0.02)
+        # Patch embedding
+        tokens, sp_after = self.patch_embed(x)  # tokens: [B, N, C]
+        B, N, C = tokens.shape
+
+        # Dynamically initialize pos_embed to match [1, N, C]
+        if self.pos_embed is None or self.pos_embed.shape[1] != N or self.pos_embed.shape[2] != C:
+            self.pos_embed = nn.Parameter(torch.zeros(1, N, C, device=x.device, dtype=tokens.dtype))
+            nn.init.trunc_normal_(self.pos_embed, std=0.02)
+
         tokens = tokens + self.pos_embed
+
+
 
         # encode
         skips = self.vit(tokens)
